@@ -711,6 +711,41 @@ export function ManageShareClient({ slug }: { slug: string }) {
           </div>
         </div>
       ) : null}
+
+      <div className="mobile-bottom-bar">
+        <div className="view-toggle" role="tablist" aria-label="显示模式">
+          <button
+            aria-selected={viewMode === "markdown"}
+            className={cn("view-toggle-button", viewMode === "markdown" && "is-active")}
+            onClick={() => setViewMode("markdown")}
+            role="tab"
+            type="button"
+          >
+            Markdown
+          </button>
+          <button
+            aria-selected={viewMode === "preview"}
+            className={cn("view-toggle-button", viewMode === "preview" && "is-active")}
+            onClick={() => setViewMode("preview")}
+            role="tab"
+            type="button"
+          >
+            预览
+          </button>
+        </div>
+        <Link className="ghost-button topbar-tool topbar-upload" href={accessUrl} target="_blank">
+          <Eye size={16} />
+          预览
+        </Link>
+        <button
+          className="ghost-button topbar-tool topbar-tool-accent topbar-create"
+          onClick={() => setDialogOpen(true)}
+          type="button"
+        >
+          <Settings2 size={16} />
+          设置
+        </button>
+      </div>
     </main>
   );
 }

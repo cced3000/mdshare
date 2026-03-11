@@ -282,6 +282,17 @@ export function PublicShareClient({ slug }: { slug: string }) {
           <MarkdownPreview markdown={payload.share.markdownContent} emptyLabel="这份分享没有内容" />
         </article>
       </section>
+
+      <div className="mobile-bottom-bar">
+        <button className="ghost-button topbar-tool" onClick={() => void handleCopyContent()} type="button">
+          <Copy size={16} />
+          {copied ? "已复制" : "复制内容"}
+        </button>
+        <button className="ghost-button topbar-tool" onClick={handleDownloadMarkdown} type="button">
+          <Download size={16} />
+          下载 .md
+        </button>
+      </div>
     </main>
   );
 }

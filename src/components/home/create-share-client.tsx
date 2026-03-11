@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight,
+  CircleCheck,
   Clock3,
   Copy,
   Eye,
   FileUp,
   Flame,
+  Info,
   KeyRound,
   Link2,
   NotebookText,
@@ -65,8 +67,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   }
 
   return (
-    <button className="copy-button" onClick={() => void handleCopy()} type="button">
-      <Copy size={16} />
+    <button className="copy-button compact-button" onClick={() => void handleCopy()} type="button">
+      <Copy size={14} />
       {copied ? "已复制" : label}
     </button>
   );
@@ -385,38 +387,51 @@ export function CreateShareClient() {
 
             <div className={cn("share-modal-right", !created && "is-empty")}>
               {created ? (
-                <>
-                  <div className="modal-title">
-                    <Eye size={18} />
-                    链接信息
+                <div className="share-result">
+                  <div className="share-result-hero">
+                    <div className="share-result-ring" />
+                    <div className="share-result-icon">
+                      <CircleCheck size={28} />
+                    </div>
                   </div>
+
+                  <p className="share-result-title">分享链接已创建</p>
 
                   <div className="modal-summary">
                     <span>
+                      <Clock3 size={13} />
                       到期 {new Intl.DateTimeFormat("zh-CN", {
                         dateStyle: "medium",
                         timeStyle: "short",
                       }).format(new Date(created.expiresAt))}
                     </span>
-                    <span>{created.editUrl ? "含编辑链接" : "只读分享"}</span>
+                    <span>
+                      {created.editUrl ? <><PencilLine size={13} /> 含编辑链接</> : <><Eye size={13} /> 只读分享</>}
+                    </span>
                   </div>
 
                   <div className="link-list">
                     <div className="link-card">
-                      <span>访问链接</span>
+                      <span className="link-card-label">
+                        <Eye size={15} />
+                        访问链接
+                      </span>
                       <code>{created.accessUrl}</code>
                       <div className="link-actions">
                         <CopyButton label="复制访问链接" value={created.accessUrl} />
-                        <Link className="ghost-button" href={created.accessUrl} target="_blank">
+                        <Link className="ghost-button compact-button" href={created.accessUrl} target="_blank">
                           打开
-                          <ArrowUpRight size={15} />
+                          <ArrowUpRight size={13} />
                         </Link>
                       </div>
                     </div>
 
                     {created.editUrl ? (
                       <div className="link-card">
-                        <span>编辑链接</span>
+                        <span className="link-card-label">
+                          <PencilLine size={15} />
+                          编辑链接
+                        </span>
                         <code>{created.editUrl}</code>
                         <div className="link-actions">
                           <CopyButton label="复制编辑链接" value={created.editUrl} />
@@ -424,19 +439,22 @@ export function CreateShareClient() {
                       </div>
                     ) : null}
 
-                    <div className="link-card">
-                      <span>管理链接</span>
+                    <div
+                      className="link-card link-card-manage"
+                      title="管理链接是匿名模式下继续修改、延长有效期或删除内容的唯一凭证之一，请保存好它。"
+                    >
+                      <span className="link-card-label">
+                        <KeyRound size={15} />
+                        管理链接
+                        <Info size={13} className="link-card-tip-icon" />
+                      </span>
                       <code>{created.manageUrl}</code>
                       <div className="link-actions">
                         <CopyButton label="复制管理链接" value={created.manageUrl} />
                       </div>
                     </div>
                   </div>
-
-                  <p className="helper-copy emphasis">
-                    管理链接是匿名模式下继续修改、延长有效期或删除内容的唯一凭证之一，请保存好它。
-                  </p>
-                </>
+                </div>
               ) : (
                 <div className="share-preview-empty">
                   <div className="share-empty-hero">
@@ -477,6 +495,52 @@ export function CreateShareClient() {
           </div>
         </div>
       ) : null}
+
+      <div className="mobile-bottom-bar">
+        <div className="view-toggle" role="tablist" aria-label="显示模式">
+          <button
+            aria-selected={viewMode === "markdown"}
+            className={cn("view-toggle-button", viewMode === "markdown" && "is-active")}
+            onClick={() => setViewMode("markdown")}
+            role="tab"
+            type="button"
+          >
+            Markdown
+          </button>
+          <button
+            aria-selected={viewMode === "preview"}
+            className={cn("view-toggle-button", viewMode === "preview" && "is-active")}
+            onClick={() => setViewMode("preview")}
+            role="tab"
+            type="button"
+          >
+            预览
+          </button>
+        </div>
+        <label className="ghost-button topbar-tool topbar-upload">
+          <FileUp size={16} />
+          上传
+          <input
+            accept=".md,.markdown,.txt,text/plain"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void handleImport(file);
+              }
+            }}
+            type="file"
+          />
+        </label>
+        <button
+          className="ghost-button topbar-tool topbar-tool-accent topbar-create"
+          onClick={() => setDialogOpen(true)}
+          type="button"
+        >
+          <Link2 size={16} />
+          创建分享
+        </button>
+      </div>
     </main>
   );
 }
