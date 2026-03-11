@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { deleteShare, getManageShare, saveShareContent } from "@/lib/share-service";
 
+export const runtime = "edge";
+
 const saveSchema = z.object({
   markdownContent: z.string().min(1),
   lastKnownUpdatedAt: z.string().datetime().nullable().optional(),

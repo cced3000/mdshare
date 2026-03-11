@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { createShare } from "@/lib/share-service";
 
+export const runtime = "edge";
+
 const editableModeSchema = z.enum(["READ_ONLY", "EDIT_LINK"]);
 const burnModeSchema = z.enum([
   "OFF",

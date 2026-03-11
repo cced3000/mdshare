@@ -1,65 +1,24 @@
-import Database from "better-sqlite3";
-import fs from "fs";
-import path from "path";
+import { drizzle } from "drizzle-orm/d1";
+import * as schema from "./schema";
 
-type GlobalWithDb = typeof globalThis & {
-  mdshareDb?: Database.Database;
-};
+export function getDb() {
+  // 在 Edge Runtime 中，从全局或请求上下文获取 D1 绑定
+  // 如果是本地 mock 环境，可能需要通过 process.env 获取（视具体接入方式而定）
+  // 最佳实践是通过 @cloudflare/next-on-pages 的 getRequestContext()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let d1: any;
+  try {
+    const { getRequestContext } = require("@cloudflare/next-on-pages");
+    d1 = getRequestContext()?.env?.DB || process.env.DB || (globalThis as any).process?.env?.DB;
+  } catch {
+    // Fallback for types/build time if needed
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    d1 = process.env.DB || (globalThis as any).process?.env?.DB || (globalThis as any).__D1_BETA__DB;
+  }
+  
+  if (!d1) {
+    throw new Error("Unable to find Cloudflare D1 binding 'DB'");
+  }
 
-function resolveDatabasePath() {
-  const raw = process.env.DATABASE_URL ?? "file:./dev.db";
-  const normalized = raw.startsWith("file:") ? raw.replace(/^file:/, "") : raw;
-  return path.resolve(process.cwd(), normalized);
-}
-
-function createDatabase() {
-  const dbPath = resolveDatabasePath();
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-
-  const db = new Database(dbPath);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS shares (
-      id TEXT PRIMARY KEY,
-      slug TEXT NOT NULL UNIQUE,
-      title TEXT,
-      markdown_content TEXT NOT NULL,
-      expires_at TEXT NOT NULL,
-      password_hash TEXT,
-      editable_mode TEXT NOT NULL DEFAULT 'READ_ONLY',
-      burn_mode TEXT NOT NULL DEFAULT 'OFF',
-      burned_at TEXT,
-      first_viewed_at TEXT,
-      owner_token_hash TEXT NOT NULL,
-      editor_token_hash TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      deleted_at TEXT
-    );
-
-    CREATE TABLE IF NOT EXISTS share_views (
-      id TEXT PRIMARY KEY,
-      share_id TEXT NOT NULL,
-      viewed_at TEXT NOT NULL,
-      confirmed INTEGER NOT NULL DEFAULT 0,
-      ip_hash TEXT,
-      user_agent_hash TEXT,
-      FOREIGN KEY (share_id) REFERENCES shares(id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_shares_slug ON shares(slug);
-    CREATE INDEX IF NOT EXISTS idx_share_views_share_id ON share_views(share_id, viewed_at);
-  `);
-
-  return db;
-}
-
-const globalWithDb = globalThis as GlobalWithDb;
-
-export const db = globalWithDb.mdshareDb ?? createDatabase();
-
-if (process.env.NODE_ENV !== "production") {
-  globalWithDb.mdshareDb = db;
+  return drizzle(d1, { schema });
 }

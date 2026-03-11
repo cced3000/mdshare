@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { updateShareSettings } from "@/lib/share-service";
 
+export const runtime = "edge";
+
 const settingsSchema = z.object({
   expiresInHours: z.number().int().positive(),
   password: z.string().max(120).optional(),

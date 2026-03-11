@@ -1,8 +1,8 @@
-import { randomUUID } from "crypto";
-
-import bcrypt from "bcryptjs";
-
-import { db } from "@/lib/db";
+import { eq, and, lt, isNull, isNotNull, sql } from "drizzle-orm";
+// bcrypt-ts instead of bcryptjs
+import { hash, compare } from "bcrypt-ts"; 
+import { getDb } from "@/lib/db";
+import { shares, shareViews } from "@/lib/schema";
 import { BURN_GRACE_MINUTES, DEFAULT_EXPIRY_HOURS, EXPIRY_OPTIONS } from "@/lib/constants";
 import {
   addHours,
@@ -40,23 +40,7 @@ type ViewerContext = {
   userAgent?: string | null;
 };
 
-type ShareRow = {
-  id: string;
-  slug: string;
-  title: string | null;
-  markdown_content: string;
-  expires_at: string;
-  password_hash: string | null;
-  editable_mode: EditableMode;
-  burn_mode: BurnMode;
-  burned_at: string | null;
-  first_viewed_at: string | null;
-  owner_token_hash: string;
-  editor_token_hash: string | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-};
+type ShareRow = typeof shares.$inferSelect;
 
 const allowedExpiryHours = new Set(EXPIRY_OPTIONS.map((item) => item.hours));
 
@@ -65,42 +49,41 @@ function nowIso() {
 }
 
 function createId() {
-  return randomUUID();
+  return crypto.randomUUID();
 }
 
 function getExpiryIso(hours?: number) {
   if (!hours || !allowedExpiryHours.has(hours)) {
     return addHours(DEFAULT_EXPIRY_HOURS).toISOString();
   }
-
   return addHours(hours).toISOString();
 }
 
 function serializeShare(share: ShareRow) {
-  const burnDeadline = share.first_viewed_at
-    ? getBurnDeadline(new Date(share.first_viewed_at))
+  const burnDeadline = share.firstViewedAt
+    ? getBurnDeadline(new Date(share.firstViewedAt))
     : null;
 
   return {
     slug: share.slug,
-    markdownContent: share.markdown_content,
-    expiresAt: share.expires_at,
-    createdAt: share.created_at,
-    updatedAt: share.updated_at,
-    editableMode: share.editable_mode,
-    burnMode: share.burn_mode,
-    firstViewedAt: share.first_viewed_at,
+    markdownContent: share.markdownContent,
+    expiresAt: share.expiresAt,
+    createdAt: share.createdAt,
+    updatedAt: share.updatedAt,
+    editableMode: share.editableMode as EditableMode,
+    burnMode: share.burnMode as BurnMode,
+    firstViewedAt: share.firstViewedAt,
     burnDeadline: burnDeadline?.toISOString() ?? null,
-    deletedAt: share.deleted_at,
-    burnedAt: share.burned_at,
-    statusLabel: share.deleted_at
+    deletedAt: share.deletedAt,
+    burnedAt: share.burnedAt,
+    statusLabel: share.deletedAt
       ? "已删除"
-      : share.burned_at
+      : share.burnedAt
         ? "已焚毁"
-        : new Date(share.expires_at) <= new Date()
+        : new Date(share.expiresAt) <= new Date()
           ? "已过期"
           : "可用",
-    expiresAtLabel: formatAbsoluteDate(share.expires_at),
+    expiresAtLabel: formatAbsoluteDate(share.expiresAt),
   };
 }
 
@@ -111,70 +94,65 @@ function getLifecycleState(share: ShareRow | null) {
     return "not_found" as const;
   }
 
-  if (share.deleted_at) {
+  if (share.deletedAt) {
     return "deleted" as const;
   }
 
-  if (share.burned_at) {
+  if (share.burnedAt) {
     return "burned" as const;
   }
 
-  if (share.burn_mode === "AFTER_FIRST_VIEW_GRACE" && share.first_viewed_at) {
-    const burnDeadline = getBurnDeadline(new Date(share.first_viewed_at));
+  if (share.burnMode === "AFTER_FIRST_VIEW_GRACE" && share.firstViewedAt) {
+    const burnDeadline = getBurnDeadline(new Date(share.firstViewedAt));
     if (burnDeadline && burnDeadline <= now) {
       return "burned" as const;
     }
   }
 
-  if (new Date(share.expires_at) <= now) {
+  if (new Date(share.expiresAt) <= now) {
     return "expired" as const;
   }
 
   return "available" as const;
 }
 
-function findShareBySlug(slug: string) {
-  const share = db
-    .prepare("SELECT * FROM shares WHERE slug = ?")
-    .get(slug) as ShareRow | undefined;
+async function findShareBySlug(slug: string) {
+  const db = getDb();
+  const [share] = await db.select().from(shares).where(eq(shares.slug, slug)).limit(1);
 
   if (!share) {
     return null;
   }
 
   if (
-    share.burn_mode === "AFTER_FIRST_VIEW_GRACE" &&
-    share.first_viewed_at &&
-    !share.burned_at
+    share.burnMode === "AFTER_FIRST_VIEW_GRACE" &&
+    share.firstViewedAt &&
+    !share.burnedAt
   ) {
-    const burnDeadline = getBurnDeadline(new Date(share.first_viewed_at));
+    const burnDeadline = getBurnDeadline(new Date(share.firstViewedAt));
     if (burnDeadline && burnDeadline <= new Date()) {
       const burnedAt = nowIso();
-      db.prepare("UPDATE shares SET burned_at = ?, updated_at = ? WHERE id = ?").run(
-        burnedAt,
-        burnedAt,
-        share.id,
-      );
-      share.burned_at = burnedAt;
-      share.updated_at = burnedAt;
+      await db.update(shares)
+        .set({ burnedAt, updatedAt: burnedAt })
+        .where(eq(shares.id, share.id));
+      share.burnedAt = burnedAt;
+      share.updatedAt = burnedAt;
     }
   }
 
   return share;
 }
 
-function insertShareView(shareId: string, confirmed: boolean, viewer?: ViewerContext) {
-  db.prepare(
-    `INSERT INTO share_views (id, share_id, viewed_at, confirmed, ip_hash, user_agent_hash)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    createId(),
+async function insertShareView(shareId: string, confirmed: boolean, viewer?: ViewerContext) {
+  const db = getDb();
+  await db.insert(shareViews).values({
+    id: createId(),
     shareId,
-    nowIso(),
-    confirmed ? 1 : 0,
-    getClientFingerprint([viewer?.ip]),
-    getClientFingerprint([viewer?.userAgent]),
-  );
+    viewedAt: nowIso(),
+    confirmed: confirmed ? 1 : 0,
+    ipHash: await getClientFingerprint([viewer?.ip]),
+    userAgentHash: await getClientFingerprint([viewer?.userAgent]),
+  });
 }
 
 export async function createShare(input: CreateShareInput) {
@@ -188,59 +166,40 @@ export async function createShare(input: CreateShareInput) {
   const ownerToken = generateToken();
   const editorToken = input.editableMode === "EDIT_LINK" ? generateToken() : null;
   const passwordHash = input.password?.trim()
-    ? await bcrypt.hash(input.password.trim(), 10)
+    ? await hash(input.password.trim(), 10)
     : null;
   const timestamp = nowIso();
-  const share: ShareRow = {
+  
+  const shareData = {
     id: createId(),
     slug: generateSlug(),
     title: null,
-    markdown_content: markdownContent,
-    expires_at: getExpiryIso(input.expiresInHours),
-    password_hash: passwordHash,
-    editable_mode: input.editableMode ?? "READ_ONLY",
-    burn_mode: input.burnMode ?? "OFF",
-    burned_at: null,
-    first_viewed_at: null,
-    owner_token_hash: hashSecret(ownerToken),
-    editor_token_hash: editorToken ? hashSecret(editorToken) : null,
-    created_at: timestamp,
-    updated_at: timestamp,
-    deleted_at: null,
+    markdownContent: markdownContent,
+    expiresAt: getExpiryIso(input.expiresInHours),
+    passwordHash: passwordHash,
+    editableMode: input.editableMode ?? "READ_ONLY",
+    burnMode: input.burnMode ?? "OFF",
+    burnedAt: null,
+    firstViewedAt: null,
+    ownerTokenHash: await hashSecret(ownerToken),
+    editorTokenHash: editorToken ? await hashSecret(editorToken) : null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    deletedAt: null,
   };
 
-  db.prepare(
-    `INSERT INTO shares (
-      id, slug, title, markdown_content, expires_at, password_hash, editable_mode, burn_mode,
-      burned_at, first_viewed_at, owner_token_hash, editor_token_hash, created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    share.id,
-    share.slug,
-    share.title,
-    share.markdown_content,
-    share.expires_at,
-    share.password_hash,
-    share.editable_mode,
-    share.burn_mode,
-    share.burned_at,
-    share.first_viewed_at,
-    share.owner_token_hash,
-    share.editor_token_hash,
-    share.created_at,
-    share.updated_at,
-    share.deleted_at,
-  );
+  const db = getDb();
+  await db.insert(shares).values(shareData);
 
   return {
-    share: serializeShare(share),
+    share: serializeShare(shareData),
     ownerToken,
     editorToken,
   };
 }
 
 export async function getPublicShare(slug: string) {
-  const share = findShareBySlug(slug);
+  const share = await findShareBySlug(slug);
 
   if (!share) {
     return { state: "not_found" as PublicState };
@@ -251,8 +210,8 @@ export async function getPublicShare(slug: string) {
     return { state: lifecycle as PublicState };
   }
 
-  const needsBurnConfirmation = share.burn_mode !== "OFF" && !share.first_viewed_at;
-  const passwordRequired = Boolean(share.password_hash);
+  const needsBurnConfirmation = share.burnMode !== "OFF" && !share.firstViewedAt;
+  const passwordRequired = Boolean(share.passwordHash);
 
   if (needsBurnConfirmation || passwordRequired) {
     return {
@@ -260,8 +219,8 @@ export async function getPublicShare(slug: string) {
       passwordRequired,
       burnConfirmationRequired: needsBurnConfirmation,
       share: {
-        expiresAt: share.expires_at,
-        burnMode: share.burn_mode,
+        expiresAt: share.expiresAt,
+        burnMode: share.burnMode as BurnMode,
       },
     };
   }
@@ -276,7 +235,7 @@ export async function unlockPublicShare(
   slug: string,
   options: { password?: string; confirmView?: boolean; viewer?: ViewerContext },
 ) {
-  const share = findShareBySlug(slug);
+  const share = await findShareBySlug(slug);
   if (!share) {
     return { state: "not_found" as PublicState };
   }
@@ -286,70 +245,71 @@ export async function unlockPublicShare(
     return { state: lifecycle as PublicState };
   }
 
-  if (share.password_hash) {
+  if (share.passwordHash) {
     const valid = Boolean(options.password) &&
-      (await bcrypt.compare(options.password ?? "", share.password_hash));
+      (await compare(options.password ?? "", share.passwordHash));
 
     if (!valid) {
       throw new Error("访问密码不正确");
     }
   }
 
-  if (share.burn_mode === "OFF") {
-    insertShareView(share.id, true, options.viewer);
+  if (share.burnMode === "OFF") {
+    await insertShareView(share.id, true, options.viewer);
     return {
       state: "available" as PublicState,
       share: serializeShare(share),
     };
   }
 
-  if (!options.confirmView && !share.first_viewed_at) {
+  if (!options.confirmView && !share.firstViewedAt) {
     return {
       state: "gated" as PublicState,
       passwordRequired: false,
       burnConfirmationRequired: true,
       share: {
-        expiresAt: share.expires_at,
-        burnMode: share.burn_mode,
+        expiresAt: share.expiresAt,
+        burnMode: share.burnMode as BurnMode,
       },
     };
   }
 
-  if (share.burn_mode === "AFTER_FIRST_VIEW_INSTANT") {
-    if (share.first_viewed_at || share.burned_at) {
+  const db = getDb();
+
+  if (share.burnMode === "AFTER_FIRST_VIEW_INSTANT") {
+    if (share.firstViewedAt || share.burnedAt) {
       return { state: "burned" as PublicState };
     }
 
     const timestamp = nowIso();
-    db.prepare(
-      "UPDATE shares SET first_viewed_at = ?, burned_at = ?, updated_at = ? WHERE id = ?",
-    ).run(timestamp, timestamp, timestamp, share.id);
-    insertShareView(share.id, true, options.viewer);
+    await db.update(shares)
+      .set({ firstViewedAt: timestamp, burnedAt: timestamp, updatedAt: timestamp })
+      .where(eq(shares.id, share.id));
+      
+    await insertShareView(share.id, true, options.viewer);
 
     return {
       state: "available" as PublicState,
       ephemeral: true,
       share: serializeShare({
         ...share,
-        first_viewed_at: timestamp,
-        burned_at: timestamp,
-        updated_at: timestamp,
+        firstViewedAt: timestamp,
+        burnedAt: timestamp,
+        updatedAt: timestamp,
       }),
     };
   }
 
-  if (!share.first_viewed_at) {
+  if (!share.firstViewedAt) {
     const timestamp = nowIso();
-    db.prepare("UPDATE shares SET first_viewed_at = ?, updated_at = ? WHERE id = ?").run(
-      timestamp,
-      timestamp,
-      share.id,
-    );
-    share.first_viewed_at = timestamp;
-    share.updated_at = timestamp;
+    await db.update(shares)
+      .set({ firstViewedAt: timestamp, updatedAt: timestamp })
+      .where(eq(shares.id, share.id));
+    share.firstViewedAt = timestamp;
+    share.updatedAt = timestamp;
   }
 
-  insertShareView(share.id, true, options.viewer);
+  await insertShareView(share.id, true, options.viewer);
 
   return {
     state: "available" as PublicState,
@@ -362,18 +322,18 @@ export async function authenticateShareToken(slug: string, token: string | null)
     throw new Error("缺少访问令牌");
   }
 
-  const share = findShareBySlug(slug);
-  if (!share || share.deleted_at) {
+  const share = await findShareBySlug(slug);
+  if (!share || share.deletedAt) {
     throw new Error("分享不存在或已删除");
   }
 
-  const tokenHash = hashSecret(token);
+  const tokenHash = await hashSecret(token);
 
-  if (tokenHash === share.owner_token_hash) {
+  if (tokenHash === share.ownerTokenHash) {
     return { share, role: "owner" as ManageRole };
   }
 
-  if (share.editor_token_hash && tokenHash === share.editor_token_hash) {
+  if (share.editorTokenHash && tokenHash === share.editorTokenHash) {
     return { share, role: "editor" as ManageRole };
   }
 
@@ -406,7 +366,7 @@ export async function saveShareContent(options: {
   if (
     options.lastKnownUpdatedAt &&
     !options.force &&
-    share.updated_at !== options.lastKnownUpdatedAt
+    share.updatedAt !== options.lastKnownUpdatedAt
   ) {
     return {
       conflict: true,
@@ -416,14 +376,15 @@ export async function saveShareContent(options: {
   }
 
   const timestamp = nowIso();
-  db.prepare(
-    "UPDATE shares SET markdown_content = ?, updated_at = ? WHERE id = ?",
-  ).run(markdownContent, timestamp, share.id);
+  const db = getDb();
+  await db.update(shares)
+    .set({ markdownContent: markdownContent, updatedAt: timestamp })
+    .where(eq(shares.id, share.id));
 
   const updated = {
     ...share,
-    markdown_content: markdownContent,
-    updated_at: timestamp,
+    markdownContent: markdownContent,
+    updatedAt: timestamp,
   };
 
   return {
@@ -447,38 +408,36 @@ export async function updateShareSettings(options: {
   }
 
   const editorToken =
-    options.editableMode === "EDIT_LINK" && !share.editor_token_hash ? generateToken() : null;
+    options.editableMode === "EDIT_LINK" && !share.editorTokenHash ? generateToken() : null;
   const passwordValue = options.password?.trim() ?? "";
-  const passwordHash = passwordValue ? await bcrypt.hash(passwordValue, 10) : null;
+  const passwordHash = passwordValue ? await hash(passwordValue, 10) : null;
   const timestamp = nowIso();
   const expiresAt = getExpiryIso(options.expiresInHours);
   const editorTokenHash =
     options.editableMode === "EDIT_LINK"
-      ? share.editor_token_hash ?? (editorToken ? hashSecret(editorToken) : null)
+      ? share.editorTokenHash ?? (editorToken ? await hashSecret(editorToken) : null)
       : null;
 
-  db.prepare(
-    `UPDATE shares
-     SET expires_at = ?, password_hash = ?, burn_mode = ?, editable_mode = ?, editor_token_hash = ?, updated_at = ?
-     WHERE id = ?`,
-  ).run(
-    expiresAt,
-    passwordHash,
-    options.burnMode,
-    options.editableMode,
-    editorTokenHash,
-    timestamp,
-    share.id,
-  );
+  const db = getDb();
+  await db.update(shares)
+    .set({
+      expiresAt,
+      passwordHash,
+      burnMode: options.burnMode,
+      editableMode: options.editableMode,
+      editorTokenHash,
+      updatedAt: timestamp,
+    })
+    .where(eq(shares.id, share.id));
 
   const updated = {
     ...share,
-    expires_at: expiresAt,
-    password_hash: passwordHash,
-    burn_mode: options.burnMode,
-    editable_mode: options.editableMode,
-    editor_token_hash: editorTokenHash,
-    updated_at: timestamp,
+    expiresAt,
+    passwordHash,
+    burnMode: options.burnMode,
+    editableMode: options.editableMode,
+    editorTokenHash,
+    updatedAt: timestamp,
   };
 
   return {
@@ -495,44 +454,57 @@ export async function deleteShare(slug: string, token: string | null) {
   }
 
   const timestamp = nowIso();
-  db.prepare("UPDATE shares SET deleted_at = ?, updated_at = ? WHERE id = ?").run(
-    timestamp,
-    timestamp,
-    share.id,
-  );
+  const db = getDb();
+  await db.update(shares)
+    .set({ deletedAt: timestamp, updatedAt: timestamp })
+    .where(eq(shares.id, share.id));
 
   return { success: true };
 }
 
 export async function cleanupExpiredShares() {
   const now = new Date();
-  const shares = db.prepare("SELECT id, first_viewed_at FROM shares WHERE burn_mode = 'AFTER_FIRST_VIEW_GRACE' AND burned_at IS NULL AND first_viewed_at IS NOT NULL").all() as Array<{
-    id: string;
-    first_viewed_at: string;
-  }>;
+  const db = getDb();
+  const queryShares = await db.select({
+    id: shares.id,
+    firstViewedAt: shares.firstViewedAt,
+  })
+  .from(shares)
+  .where(
+    and(
+      eq(shares.burnMode, "AFTER_FIRST_VIEW_GRACE"),
+      isNull(shares.burnedAt),
+      isNotNull(shares.firstViewedAt),
+    )
+  );
 
   let burned = 0;
   const timestamp = nowIso();
 
-  for (const share of shares) {
-    const deadline = getBurnDeadline(new Date(share.first_viewed_at));
+  for (const share of queryShares) {
+    if (!share.firstViewedAt) continue;
+    
+    const deadline = getBurnDeadline(new Date(share.firstViewedAt));
     if (deadline && deadline <= now) {
-      db.prepare("UPDATE shares SET burned_at = ?, updated_at = ? WHERE id = ?").run(
-        timestamp,
-        timestamp,
-        share.id,
-      );
+      await db.update(shares)
+        .set({ burnedAt: timestamp, updatedAt: timestamp })
+        .where(eq(shares.id, share.id));
       burned += 1;
     }
   }
 
-  const expired = db
-    .prepare("SELECT COUNT(*) as count FROM shares WHERE expires_at < ? AND deleted_at IS NULL")
-    .get(timestamp) as { count: number };
+  const expiredQuery = await db.select({ count: sql<number>`count(*)` })
+    .from(shares)
+    .where(
+      and(
+        lt(shares.expiresAt, timestamp),
+        isNull(shares.deletedAt)
+      )
+    );
 
   return {
     burned,
-    expired: expired.count,
+    expired: expiredQuery[0]?.count ?? 0,
     checkedAt: timestamp,
     burnGraceMinutes: BURN_GRACE_MINUTES,
   };

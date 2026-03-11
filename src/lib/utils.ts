@@ -1,5 +1,4 @@
-import { createHash, randomBytes } from "crypto";
-import { customAlphabet } from "nanoid";
+import { customAlphabet, nanoid } from "nanoid";
 
 import { BURN_GRACE_MINUTES, MAX_MARKDOWN_BYTES } from "@/lib/constants";
 
@@ -12,16 +11,19 @@ export function generateSlug() {
 }
 
 export function generateToken() {
-  return randomBytes(24).toString("base64url");
+  return nanoid(32);
 }
 
-export function hashSecret(value: string) {
-  return createHash("sha256").update(value).digest("hex");
+export async function hashSecret(value: string) {
+  const msgUint8 = new TextEncoder().encode(value);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgUint8);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-export function getClientFingerprint(parts: Array<string | null | undefined>) {
+export async function getClientFingerprint(parts: Array<string | null | undefined>) {
   const normalized = parts.filter(Boolean).join("|");
-  return normalized ? hashSecret(normalized) : null;
+  return normalized ? await hashSecret(normalized) : null;
 }
 
 export function addHours(hours: number) {
@@ -60,7 +62,7 @@ export function inferTitle(title: string | null | undefined, markdown: string) {
 }
 
 export function validateMarkdownSize(markdown: string) {
-  const size = Buffer.byteLength(markdown, "utf8");
+  const size = new TextEncoder().encode(markdown).length;
   if (size > MAX_MARKDOWN_BYTES) {
     throw new Error(`Markdown 文件不能超过 ${Math.floor(MAX_MARKDOWN_BYTES / 1024)} KB`);
   }
