@@ -14,7 +14,7 @@
 
 ## 开发与部署 (Cloudflare Pages + D1)
 
-本项目移除了原本的 Node.js 扩展 (例如 `better-sqlite3`)，全面采用了 **Cloudflare D1 无服务器数据库**、**Web Crypto API** 以及 **Edge Runtime**。
+本项目采用了 **Cloudflare D1 无服务器数据库**、**Web Crypto API** 以及 **Edge Runtime**。
 
 ### 1. 本地开发环境准备
 
