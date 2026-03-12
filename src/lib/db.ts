@@ -1,23 +1,23 @@
 import { drizzle } from "drizzle-orm/d1";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import * as schema from "./schema";
 
-import { getRequestContext } from "@cloudflare/next-on-pages";
+function getD1Binding() {
+  try {
+    return getCloudflareContext().env.DB;
+  } catch {
+    const fallback = globalThis as typeof globalThis & {
+      DB?: D1Database;
+      __D1_BETA__DB?: D1Database;
+    };
+
+    return fallback.DB ?? fallback.__D1_BETA__DB;
+  }
+}
 
 export function getDb() {
-  // 在 Edge Runtime 中，从全局或请求上下文获取 D1 绑定
-  // 如果是本地 mock 环境，可能需要通过 process.env 获取（视具体接入方式而定）
-  // 最佳实践是通过 @cloudflare/next-on-pages 的 getRequestContext()
+  const d1 = getD1Binding();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let d1: any;
-  try {
-    d1 = (getRequestContext()?.env as any)?.DB || process.env.DB || (globalThis as any).process?.env?.DB;
-  } catch {
-    // Fallback for types/build time if needed
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    d1 = process.env.DB || (globalThis as any).process?.env?.DB || (globalThis as any).__D1_BETA__DB;
-  }
-  
   if (!d1) {
     throw new Error("Unable to find Cloudflare D1 binding 'DB'");
   }

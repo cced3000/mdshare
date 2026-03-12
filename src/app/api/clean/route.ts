@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { cleanupExpiredShares } from "@/lib/share-service";
 
-export const runtime = "edge";
-
 export async function GET(request: Request) {
   // 简易鉴权：生产环境下可以通过 header 中的特定 Token 或由 Cloudflare Workers Cron Trigger 触发
   const cronKey = request.headers.get("x-cron-key");

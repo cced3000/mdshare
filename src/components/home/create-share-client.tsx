@@ -259,12 +259,12 @@ export function CreateShareClient() {
               </div>
             ) : (
               <div className="stage-pane stage-pane-preview">
-                <div className="preview-panel preview-panel-readable">
-                  <div className="preview-inner">
-                    <MarkdownPreview markdown={markdown} />
+                  <div className="preview-panel preview-panel-readable">
+                    <div className="preview-inner">
+                      <MarkdownPreview copyable markdown={markdown} />
+                    </div>
                   </div>
                 </div>
-              </div>
             )}
           </div>
 

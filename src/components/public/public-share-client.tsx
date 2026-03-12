@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Copy, Download, Flame, KeyRound, Link2, ShieldAlert } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Copy, Download, Flame, KeyRound, Link2, LoaderCircle, ShieldAlert } from "lucide-react";
 
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { APP_NAME } from "@/lib/constants";
 import { formatAbsoluteDate, formatRelativeCountdown } from "@/lib/utils";
 
-type PublicPayload =
+export type PublicPayload =
   | {
       state: "available";
       ephemeral?: boolean;
@@ -39,35 +39,25 @@ const unavailableCopy: Record<string, string> = {
   not_found: "没有找到对应的分享内容。",
 };
 
-export function PublicShareClient({ slug }: { slug: string }) {
-  const [payload, setPayload] = useState<PublicPayload | null>(null);
+export function PublicShareClient({
+  slug,
+  initialPayload,
+}: {
+  slug: string;
+  initialPayload: PublicPayload;
+}) {
+  const [payload, setPayload] = useState<PublicPayload>(initialPayload);
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const loadShare = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    const response = await fetch(`/api/shares/${slug}/public`, {
-      cache: "no-store",
-    });
-    const result = (await response.json()) as PublicPayload | { error: string };
-
-    if (!response.ok && "error" in result) {
-      setError(result.error);
-    } else if ("state" in result) {
-      setPayload(result);
-    }
-
-    setLoading(false);
-  }, [slug]);
-
   useEffect(() => {
-    void loadShare();
-  }, [loadShare]);
+    setPayload(initialPayload);
+    setPassword("");
+    setError(null);
+    setSubmitting(false);
+  }, [initialPayload, slug]);
 
   const statusLine = useMemo(() => {
     if (!payload || !("share" in payload)) {
@@ -138,22 +128,6 @@ export function PublicShareClient({ slug }: { slug: string }) {
     URL.revokeObjectURL(url);
   }
 
-  if (loading) {
-    return (
-      <main className="viewer-shell">
-        <header className="home-topbar viewer-topbar">
-          <div className="topbar-brand">
-            <span className="topbar-name">{APP_NAME}</span>
-            <span className="topbar-note">只读访问</span>
-          </div>
-        </header>
-        <section className="viewer-stage">
-          <div className="viewer-card viewer-inline-card">正在加载内容...</div>
-        </section>
-      </main>
-    );
-  }
-
   if (
     !payload ||
     payload.state === "not_found" ||
@@ -172,7 +146,7 @@ export function PublicShareClient({ slug }: { slug: string }) {
           </div>
         </header>
         <section className="viewer-stage">
-          <div className="viewer-card viewer-empty viewer-inline-card">
+          <div className="viewer-card viewer-empty viewer-inline-card viewer-state-card">
             <ShieldAlert size={24} />
             <h1>链接不可用</h1>
             <p>{message}</p>
@@ -196,14 +170,17 @@ export function PublicShareClient({ slug }: { slug: string }) {
           {statusLine ? <p className="topbar-note">{statusLine}</p> : null}
         </header>
         <section className="viewer-stage">
-          <div className="viewer-card viewer-gated viewer-inline-card viewer-gated-card">
+          <div
+            aria-busy={submitting}
+            className="viewer-card viewer-gated viewer-inline-card viewer-gated-card viewer-state-card"
+          >
             <div className="viewer-gated-header">
               <div className="modal-summary">
                 {payload.passwordRequired ? <span>需要密码</span> : null}
                 {payload.burnConfirmationRequired ? <span>确认查看后销毁</span> : null}
               </div>
               <p className="muted-line viewer-gated-copy">
-                验证通过后才会展示正文，整个过程不会跳转到其他页面。
+                验证通过后直接显示正文，页面不会跳转。
               </p>
             </div>
 
@@ -216,6 +193,7 @@ export function PublicShareClient({ slug }: { slug: string }) {
                   </span>
                   <input
                     className="field-control"
+                    disabled={submitting}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Password"
                     type="password"
@@ -244,8 +222,8 @@ export function PublicShareClient({ slug }: { slug: string }) {
                 onClick={() => void handleUnlock(Boolean(payload.burnConfirmationRequired))}
                 type="button"
               >
-                <Link2 size={18} />
-                {submitting ? "正在验证..." : "查看内容"}
+                {submitting ? <LoaderCircle className="spin" size={18} /> : <Link2 size={18} />}
+                {submitting ? "正在准备内容..." : "查看内容"}
               </button>
             </div>
           </div>
@@ -278,7 +256,7 @@ export function PublicShareClient({ slug }: { slug: string }) {
         </div>
       </header>
       <section className="viewer-stage">
-        <article className="viewer-card viewer-inline-card viewer-content">
+        <article className="viewer-card viewer-inline-card viewer-content viewer-content-appear">
           <MarkdownPreview markdown={payload.share.markdownContent} emptyLabel="这份分享没有内容" />
         </article>
       </section>

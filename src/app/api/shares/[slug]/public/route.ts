@@ -3,8 +3,6 @@ import { z } from "zod";
 
 import { getPublicShare, unlockPublicShare } from "@/lib/share-service";
 
-export const runtime = "edge";
-
 const unlockSchema = z.object({
   password: z.string().optional(),
   confirmView: z.boolean().optional(),
