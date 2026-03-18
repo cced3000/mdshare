@@ -13,6 +13,11 @@ const replacements = [
     pattern: /__require\.resolve\("\.\/composable-cache\.cjs"\)/g,
     replacement: 'new URL("./composable-cache.cjs", import.meta.url).pathname',
   },
+  {
+    pattern: /replaceAll\("\/","\/"\),dir\.endsWith\("\.next\/server"\)/g,
+    replacement:
+      'replaceAll("\\\\","/").replaceAll("/","/"),dir.endsWith(".next/server")',
+  },
 ];
 
 function patchFile(filePath) {

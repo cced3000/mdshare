@@ -6,7 +6,7 @@
   "packageManager": "pnpm@10.11.1",
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "cf:build": "opennextjs-cloudflare build && node scripts/patch_opennext_require_resolve.mjs",
