@@ -18,9 +18,10 @@ import {
   X,
 } from "lucide-react";
 
+import { AppBrand } from "@/components/app-brand";
 import { MarkdownPreview } from "@/components/markdown-preview";
+import { PasswordField } from "@/components/password-field";
 import {
-  APP_NAME,
   BURN_MODE_OPTIONS,
   DEFAULT_EXPIRY_HOURS,
   DRAFT_STORAGE_KEY,
@@ -44,18 +45,18 @@ type CreateResponse = {
 
 type ViewMode = "markdown" | "preview";
 
-const starterMarkdown = `# Quick share
+const starterMarkdown = `# 即贴即分享
 
-把 Markdown 贴进来，右侧会即时渲染。
+把 Markdown 贴进来，右侧会即时渲染，并自动优化中文阅读排版。
 
 ## 这份服务适合
 
-- 会议纪要
-- 临时说明文档
-- 日报或公告
-- 一次性协作文稿
+- 会议纪要、临时说明和 24 小时内有效的通知
+- 带密码的 Markdown 文档分享
+- 需要只读链接或编辑链接的协作草稿
+- 一次性公告、日报与 AI 生成内容校对
 
-> 无需注册，创建后就能拿到分享链接。`;
+> 无需注册，创建后立刻拿到访问链接。`;
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -192,10 +193,7 @@ export function CreateShareClient() {
     <main className="home-shell">
       <div className="noise-layer" />
       <header className="home-topbar">
-        <div className="topbar-brand">
-          <span className="topbar-name">{APP_NAME}</span>
-          <span className="topbar-note">临时 Markdown 分享</span>
-        </div>
+        <AppBrand note="临时 Markdown 分享" />
 
         <div className="topbar-actions topbar-actions-quiet">
           <div className="view-toggle" role="tablist" aria-label="显示模式">
@@ -330,11 +328,9 @@ export function CreateShareClient() {
                   <KeyRound size={16} />
                   密码访问
                 </span>
-                <input
-                  className="field-control"
+                <PasswordField
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="留空表示无需密码"
-                  type="password"
                   value={password}
                 />
               </label>

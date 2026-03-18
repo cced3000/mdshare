@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { resolveApiError } from "@/lib/api-errors";
 import { updateShareSettings } from "@/lib/share-service";
 
 const settingsSchema = z.object({
@@ -30,9 +31,7 @@ export async function PATCH(
 
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "修改设置时发生未知错误";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    const { message, status } = resolveApiError(error, "修改设置时发生未知错误");
+    return NextResponse.json({ error: message }, { status });
   }
 }

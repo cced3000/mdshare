@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { resolveApiError } from "@/lib/api-errors";
 import { createShare } from "@/lib/share-service";
 
 const editableModeSchema = z.enum(["READ_ONLY", "EDIT_LINK"]);
@@ -25,9 +26,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "创建分享时发生未知错误";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    const { message, status } = resolveApiError(error, "创建分享时发生未知错误");
+    return NextResponse.json({ error: message }, { status });
   }
 }

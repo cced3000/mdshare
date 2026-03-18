@@ -42,6 +42,25 @@ export function normalizeMarkdown(markdown: string) {
   return markdown.replace(/\r\n/g, "\n").trimEnd();
 }
 
+const CJK_TEXT_PATTERN =
+  "\u2e80-\u2eff\u2f00-\u2fdf\u3040-\u30ff\u3100-\u312f\u31a0-\u31bf\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff";
+const CJK_LEFT_SPACING_PATTERN = "A-Za-z0-9@#&%+\\-=\\/\\\\|_*~";
+const CJK_RIGHT_SPACING_PATTERN = "A-Za-z0-9!#$%&*+,\\-./:;=?@\\\\^_{}~";
+
+export function optimizeChineseTypography(text: string) {
+  return text
+    .replace(/\u00a0/g, " ")
+    .replace(
+      new RegExp(`([${CJK_TEXT_PATTERN}])([${CJK_LEFT_SPACING_PATTERN}])`, "g"),
+      "$1 $2",
+    )
+    .replace(
+      new RegExp(`([${CJK_RIGHT_SPACING_PATTERN}])(?!\\s)([${CJK_TEXT_PATTERN}])`, "g"),
+      "$1 $2",
+    )
+    .replace(/ {2,}/g, " ");
+}
+
 export function inferTitle(title: string | null | undefined, markdown: string) {
   const trimmed = title?.trim();
   if (trimmed) {

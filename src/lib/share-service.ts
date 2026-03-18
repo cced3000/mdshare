@@ -173,7 +173,6 @@ export async function createShare(input: CreateShareInput) {
   const shareData = {
     id: createId(),
     slug: generateSlug(),
-    title: null,
     markdownContent: markdownContent,
     expiresAt: getExpiryIso(input.expiresInHours),
     passwordHash: passwordHash,

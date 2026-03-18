@@ -148,14 +148,52 @@ code {
 
 .topbar-brand {
   display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  backdrop-filter: none;
+  padding: 6px 10px 6px 4px;
+  border-radius: 12px;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.topbar-brand:hover {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.topbar-brand-copy {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.topbar-logo {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.topbar-logo-svg {
+  width: 34px;
+  height: 34px;
+}
+
+.topbar-logo-plate {
+  fill: rgba(60, 97, 149, 0.1);
+  stroke: rgba(60, 97, 149, 0.28);
+}
+
+.topbar-logo-mark {
+  stroke: var(--accent-strong);
+  stroke-width: 2.2;
+}
+
+.topbar-logo-mark-soft {
+  opacity: 0.64;
 }
 
 .topbar-name {
@@ -163,6 +201,7 @@ code {
   font-size: 1rem;
   color: var(--ink);
   letter-spacing: -0.01em;
+  line-height: 1.1;
 }
 
 .topbar-note,
@@ -170,6 +209,7 @@ code {
   margin: 0;
   font-size: 0.84rem;
   color: rgba(106, 111, 127, 0.92);
+  line-height: 1.1;
 }
 
 .topbar-note-inline {
@@ -482,6 +522,43 @@ code {
 
 .field-control {
   padding: 14px 16px;
+}
+
+.password-field {
+  position: relative;
+  width: 100%;
+}
+
+.password-field .field-control {
+  padding-right: 48px;
+}
+
+.password-visibility-button {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(29, 36, 51, 0.56);
+  transform: translateY(-50%);
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.password-visibility-button:hover {
+  background: rgba(29, 36, 51, 0.06);
+  color: var(--ink);
+}
+
+.password-visibility-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .editor-stats {
@@ -1030,8 +1107,8 @@ code {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 12px;
   border: 1px solid rgba(26, 37, 54, 0.08);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
@@ -1106,11 +1183,25 @@ code {
   margin: 0;
   min-width: 0;
   color: #2d3446;
-  font-family: "Palatino Linotype", "Source Han Serif SC", "Noto Serif CJK SC", serif;
-  font-size: 1.04rem;
-  line-height: 1.88;
-  letter-spacing: 0.01em;
-  overflow-wrap: anywhere;
+  font-family:
+    "Iowan Old Style",
+    "Palatino Linotype",
+    "Songti SC",
+    "STSong",
+    "Source Han Serif SC",
+    "Noto Serif CJK SC",
+    serif;
+  font-size: 1.05rem;
+  line-height: 1.92;
+  letter-spacing: 0.012em;
+  overflow-wrap: break-word;
+  word-break: normal;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+  hanging-punctuation: first allow-end last;
+  line-break: auto;
+  text-spacing-trim: space-all;
+  text-autospace: normal;
 }
 
 .markdown-body>* {
@@ -1120,10 +1211,17 @@ code {
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3 {
-  font-family: "Palatino Linotype", "Source Han Serif SC", "Noto Serif CJK SC", serif;
+  font-family:
+    "SF Pro Display",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei UI",
+    "Noto Sans CJK SC",
+    sans-serif;
   line-height: 1.2;
   margin-top: 1.65em;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
 .markdown-body h1 {
@@ -1162,6 +1260,14 @@ code {
   margin-bottom: 1rem;
 }
 
+.markdown-body p,
+.markdown-body li,
+.markdown-body blockquote,
+.markdown-body td,
+.markdown-body th {
+  text-wrap: pretty;
+}
+
 .markdown-body ul,
 .markdown-body ol {
   padding-left: 1.4rem;
@@ -1169,6 +1275,11 @@ code {
 
 .markdown-body li+li {
   margin-top: 0.38rem;
+}
+
+.markdown-body li>p {
+  margin-top: 0.35rem;
+  margin-bottom: 0.35rem;
 }
 
 .markdown-body hr {
@@ -1215,6 +1326,7 @@ code {
   text-decoration: underline;
   text-decoration-color: rgba(44, 90, 146, 0.28);
   text-underline-offset: 0.18em;
+  text-decoration-thickness: 0.08em;
 }
 
 .markdown-body table {
@@ -1359,6 +1471,7 @@ code {
 
   .topbar-brand {
     align-self: flex-start;
+    padding-left: 0;
   }
 
   .mobile-bottom-bar {
@@ -1418,6 +1531,7 @@ code {
   .markdown-input-readable,
   .preview-inner {
     padding: 20px 0 0 0;
+    position: relative;
   }
 
   .markdown-input-readable {

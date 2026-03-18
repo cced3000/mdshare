@@ -3,7 +3,6 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
 export const shares = sqliteTable("shares", {
   id: text("id").primaryKey(),
   slug: text("slug").notNull().unique(),
-  title: text("title"),
   markdownContent: text("markdown_content").notNull(),
   expiresAt: text("expires_at").notNull(),
   passwordHash: text("password_hash"),

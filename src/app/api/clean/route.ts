@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+
+import { resolveServerError } from "@/lib/api-errors";
 import { cleanupExpiredShares } from "@/lib/share-service";
 
 export async function GET(request: Request) {
@@ -19,7 +21,7 @@ export async function GET(request: Request) {
     const result = await cleanupExpiredShares();
     return NextResponse.json(result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "清理失败";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const { message, status } = resolveServerError(error, "清理失败");
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -4,6 +4,7 @@ import {
   Children,
   cloneElement,
   isValidElement,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
@@ -13,11 +14,29 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 
+import { optimizeChineseTypography } from "@/lib/utils";
+
 type MarkdownPreviewProps = {
   markdown: string;
   emptyLabel?: string;
   copyable?: boolean;
+  copyLabel?: string;
 };
+
+const TYPOGRAPHY_SKIP_TAGS = new Set([
+  "A",
+  "BUTTON",
+  "CODE",
+  "INPUT",
+  "KBD",
+  "OPTION",
+  "PRE",
+  "SAMP",
+  "SELECT",
+  "STYLE",
+  "SCRIPT",
+  "TEXTAREA",
+]);
 
 function extractNodeText(node: ReactNode): string {
   if (typeof node === "string" || typeof node === "number") {
@@ -116,13 +135,63 @@ function sanitizePreviewHtml(source: HTMLElement) {
   return clone.innerHTML.trim();
 }
 
+function shouldOptimizeTextNode(root: HTMLElement, node: Text) {
+  const content = node.textContent ?? "";
+  if (!content.trim()) {
+    return false;
+  }
+
+  let parent = node.parentElement;
+  while (parent) {
+    if (TYPOGRAPHY_SKIP_TAGS.has(parent.tagName)) {
+      return false;
+    }
+
+    if (parent === root) {
+      break;
+    }
+
+    parent = parent.parentElement;
+  }
+
+  return true;
+}
+
+function optimizePreviewTypography(root: HTMLElement) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const pendingNodes: Text[] = [];
+
+  while (walker.nextNode()) {
+    const currentNode = walker.currentNode;
+    if (currentNode instanceof Text && shouldOptimizeTextNode(root, currentNode)) {
+      pendingNodes.push(currentNode);
+    }
+  }
+
+  for (const textNode of pendingNodes) {
+    const nextText = optimizeChineseTypography(textNode.textContent ?? "");
+    if (nextText !== textNode.textContent) {
+      textNode.textContent = nextText;
+    }
+  }
+}
+
 export function MarkdownPreview({
   markdown,
-  emptyLabel = "这里会实时渲染 Markdown 预览",
+  emptyLabel = "这里会实时渲染 Markdown 预览，并自动优化中文排版",
   copyable = false,
+  copyLabel = "复制排版",
 }: MarkdownPreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!previewRef.current) {
+      return;
+    }
+
+    optimizePreviewTypography(previewRef.current);
+  }, [markdown]);
 
   async function handleCopyPreview() {
     if (!previewRef.current) {
@@ -175,18 +244,18 @@ export function MarkdownPreview({
       {copyable ? (
         <div className="markdown-preview-actions">
           <button
-            aria-label="复制预览内容"
+            aria-label={copyLabel}
             className="preview-copy-button"
             onClick={() => void handleCopyPreview()}
             type="button"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? "已复制" : "复制"}</span>
+            <span>{copied ? "已复制" : copyLabel}</span>
           </button>
         </div>
       ) : null}
 
-      <div ref={previewRef} className="markdown-body">
+      <div ref={previewRef} className="markdown-body" lang="zh-CN">
         <ReactMarkdown
           components={{
             a: ({ children, ...props }) => (

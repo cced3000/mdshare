@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
 type AutoResizeTextareaProps = {
   className?: string;
@@ -18,16 +18,12 @@ export function AutoResizeTextarea({
   value,
 }: AutoResizeTextareaProps) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
-  const [focused, setFocused] = useState(false);
 
-  const syncTextareaMetrics = useCallback(() => {
+  const syncActiveLineMetrics = useCallback(() => {
     const node = ref.current;
     if (!node) {
       return;
     }
-
-    node.style.height = "0px";
-    node.style.height = `${node.scrollHeight}px`;
 
     const computedStyle = window.getComputedStyle(node);
     const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 33;
@@ -40,22 +36,34 @@ export function AutoResizeTextarea({
     node.style.setProperty("--active-line-bottom", `${activeLineTop + lineHeight}px`);
   }, []);
 
+  const syncTextareaHeight = useCallback(() => {
+    const node = ref.current;
+    if (!node) {
+      return;
+    }
+
+    const viewport = window;
+    const { scrollX, scrollY } = viewport;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight}px`;
+    viewport.scrollTo(scrollX, scrollY);
+  }, []);
+
   useLayoutEffect(() => {
-    syncTextareaMetrics();
-  }, [focused, syncTextareaMetrics, value]);
+    syncTextareaHeight();
+    syncActiveLineMetrics();
+  }, [syncActiveLineMetrics, syncTextareaHeight, value]);
 
   return (
     <textarea
       className={className}
-      data-focused={focused ? "true" : "false"}
       onChange={(event) => onChange(event.target.value)}
-      onClick={syncTextareaMetrics}
-      onFocus={() => setFocused(true)}
-      onKeyUp={syncTextareaMetrics}
-      onBlur={() => setFocused(false)}
+      onClick={syncActiveLineMetrics}
+      onFocus={syncActiveLineMetrics}
+      onKeyUp={syncActiveLineMetrics}
       placeholder={placeholder}
       ref={ref}
-      onSelect={syncTextareaMetrics}
+      onSelect={syncActiveLineMetrics}
       spellCheck={spellCheck}
       value={value}
     />

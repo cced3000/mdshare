@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { resolveApiError } from "@/lib/api-errors";
 import { getPublicShare, unlockPublicShare } from "@/lib/share-service";
 
 const unlockSchema = z.object({
@@ -21,10 +22,16 @@ export async function GET(
   context: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await context.params;
-  const result = await getPublicShare(slug);
-  const status = result.state === "not_found" ? 404 : 200;
 
-  return NextResponse.json(result, { status });
+  try {
+    const result = await getPublicShare(slug);
+    const status = result.state === "not_found" ? 404 : 200;
+
+    return NextResponse.json(result, { status });
+  } catch (error) {
+    const { message, status } = resolveApiError(error, "访问分享时发生未知错误");
+    return NextResponse.json({ error: message }, { status });
+  }
 }
 
 export async function POST(
@@ -49,9 +56,7 @@ export async function POST(
 
     return NextResponse.json(result, { status });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "访问分享时发生未知错误";
-
-    return NextResponse.json({ error: message }, { status: 400 });
+    const { message, status } = resolveApiError(error, "访问分享时发生未知错误");
+    return NextResponse.json({ error: message }, { status });
   }
 }

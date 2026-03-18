@@ -20,8 +20,8 @@ import {
 } from "lucide-react";
 
 import { MarkdownPreview } from "@/components/markdown-preview";
+import { PasswordField } from "@/components/password-field";
 import {
-  APP_NAME,
   EDITOR_AUTOSAVE_DEBOUNCE_MS,
   BURN_MODE_OPTIONS,
   DEFAULT_EXPIRY_HOURS,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/constants";
 import { cn, formatAbsoluteDate } from "@/lib/utils";
 import { AutoResizeTextarea } from "@/components/auto-resize-textarea";
+import { AppBrand } from "@/components/app-brand";
 
 type EditableModeValue = "READ_ONLY" | "EDIT_LINK";
 type BurnModeValue = (typeof BURN_MODE_OPTIONS)[number]["value"];
@@ -426,12 +427,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
   return (
     <main className="manage-shell">
       <header className="home-topbar">
-        <div className="topbar-brand">
-          <span className="topbar-name">{APP_NAME}</span>
-          <span className="topbar-note">
-            {payload.role === "owner" ? "管理模式" : "编辑模式"}
-          </span>
-        </div>
+        <AppBrand note={payload.role === "owner" ? "管理模式" : "编辑模式"} />
 
         <div className="topbar-actions topbar-actions-quiet">
           <div className="view-toggle" role="tablist" aria-label="显示模式">
@@ -573,11 +569,9 @@ export function ManageShareClient({ slug }: { slug: string }) {
 
                 <label className="field">
                   <span>重设密码</span>
-                  <input
-                    className="field-control"
+                  <PasswordField
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="留空表示关闭密码"
-                    type="password"
                     value={password}
                   />
                 </label>

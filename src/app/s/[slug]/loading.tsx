@@ -1,13 +1,10 @@
-import { APP_NAME } from "@/lib/constants";
+import { AppBrand } from "@/components/app-brand";
 
 export default function ShareLoading() {
   return (
     <main className="viewer-shell">
       <header className="home-topbar viewer-topbar">
-        <div className="topbar-brand">
-          <span className="topbar-name">{APP_NAME}</span>
-          <span className="topbar-note">正在准备内容</span>
-        </div>
+        <AppBrand note="正在准备内容" />
       </header>
 
       <section className="viewer-stage">

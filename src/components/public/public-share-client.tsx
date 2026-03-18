@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Copy, Download, Flame, KeyRound, Link2, LoaderCircle, ShieldAlert } from "lucide-react";
 
+import { AppBrand } from "@/components/app-brand";
 import { MarkdownPreview } from "@/components/markdown-preview";
-import { APP_NAME } from "@/lib/constants";
+import { PasswordField } from "@/components/password-field";
 import { formatAbsoluteDate, formatRelativeCountdown } from "@/lib/utils";
 
 export type PublicPayload =
@@ -100,7 +101,7 @@ export function PublicShareClient({
     }
   }
 
-  async function handleCopyContent() {
+  async function handleCopyMarkdown() {
     if (!payload || payload.state !== "available") {
       return;
     }
@@ -140,10 +141,7 @@ export function PublicShareClient({
     return (
       <main className="viewer-shell">
         <header className="home-topbar viewer-topbar">
-          <div className="topbar-brand">
-            <span className="topbar-name">{APP_NAME}</span>
-            <span className="topbar-note">只读访问</span>
-          </div>
+          <AppBrand note="只读访问" />
         </header>
         <section className="viewer-stage">
           <div className="viewer-card viewer-empty viewer-inline-card viewer-state-card">
@@ -163,10 +161,7 @@ export function PublicShareClient({
     return (
       <main className="viewer-shell">
         <header className="home-topbar viewer-topbar">
-          <div className="topbar-brand">
-            <span className="topbar-name">{APP_NAME}</span>
-            <span className="topbar-note">受保护访问</span>
-          </div>
+          <AppBrand note="受保护访问" />
           {statusLine ? <p className="topbar-note">{statusLine}</p> : null}
         </header>
         <section className="viewer-stage">
@@ -191,12 +186,10 @@ export function PublicShareClient({
                     <KeyRound size={16} />
                     输入访问密码
                   </span>
-                  <input
-                    className="field-control"
+                  <PasswordField
                     disabled={submitting}
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder="Password"
-                    type="password"
                     value={password}
                   />
                 </label>
@@ -239,15 +232,12 @@ export function PublicShareClient({
   return (
     <main className="viewer-shell">
       <header className="home-topbar viewer-topbar">
-        <div className="topbar-brand">
-          <span className="topbar-name">{APP_NAME}</span>
-          <span className="topbar-note">只读访问</span>
-        </div>
+        <AppBrand note="只读访问" />
         <div className="topbar-actions topbar-actions-quiet">
           {statusLine ? <p className="topbar-note topbar-note-inline">{statusLine}</p> : null}
-          <button className="ghost-button topbar-tool" onClick={() => void handleCopyContent()} type="button">
+          <button className="ghost-button topbar-tool" onClick={() => void handleCopyMarkdown()} type="button">
             <Copy size={16} />
-            {copied ? "已复制" : "复制内容"}
+            {copied ? "已复制" : "复制 Markdown"}
           </button>
           <button className="ghost-button topbar-tool" onClick={handleDownloadMarkdown} type="button">
             <Download size={16} />
@@ -257,14 +247,14 @@ export function PublicShareClient({
       </header>
       <section className="viewer-stage">
         <article className="viewer-card viewer-inline-card viewer-content viewer-content-appear">
-          <MarkdownPreview markdown={payload.share.markdownContent} emptyLabel="这份分享没有内容" />
+          <MarkdownPreview markdown={payload.share.markdownContent} emptyLabel="这份分享还没有正文" />
         </article>
       </section>
 
       <div className="mobile-bottom-bar">
-        <button className="ghost-button topbar-tool" onClick={() => void handleCopyContent()} type="button">
+        <button className="ghost-button topbar-tool" onClick={() => void handleCopyMarkdown()} type="button">
           <Copy size={16} />
-          {copied ? "已复制" : "复制内容"}
+          {copied ? "已复制" : "复制 Markdown"}
         </button>
         <button className="ghost-button topbar-tool" onClick={handleDownloadMarkdown} type="button">
           <Download size={16} />
