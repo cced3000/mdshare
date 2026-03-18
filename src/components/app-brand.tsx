@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 
+import { useI18n } from "@/components/i18n-provider";
 import { APP_NAME } from "@/lib/constants";
 
 export function AppBrand({ note }: { note: string }) {
+  const { t } = useI18n();
+
   return (
-    <Link aria-label="返回首页" className="topbar-brand" href="/">
+    <Link aria-label={t("brand.backHome")} className="topbar-brand" href="/">
       <span className="topbar-logo" aria-hidden="true">
         <svg
           className="topbar-logo-svg"

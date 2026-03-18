@@ -1,3 +1,7 @@
+import { ZodError } from "zod";
+
+import { localizeErrorMessage, translate, type Language, type TranslationKey } from "@/lib/i18n";
+
 type ApiErrorInfo = {
   message: string;
   status: number;
@@ -28,38 +32,49 @@ function collectErrorMessages(error: unknown) {
 
 export function resolveApiError(
   error: unknown,
-  fallbackMessage: string,
+  language: Language,
+  fallbackKey: TranslationKey,
 ): ApiErrorInfo {
+  if (error instanceof ZodError) {
+    return {
+      message: translate(language, "error.invalidRequest"),
+      status: 400,
+    };
+  }
+
   const messages = collectErrorMessages(error);
   const normalized = messages.join("\n").toLowerCase();
 
   if (normalized.includes("no such table: shares") || normalized.includes("no such table: share_views")) {
     return {
-      message:
-        "数据库尚未初始化。请先运行本地迁移 `pnpm run db:migrate:local`；如果是线上环境，请运行 `pnpm run db:migrate`。",
+      message: translate(language, "error.databaseNotReady"),
       status: 503,
     };
   }
 
   if (normalized.includes("unable to find cloudflare d1 binding 'db'")) {
     return {
-      message:
-        "未检测到 Cloudflare D1 的 `DB` 绑定。请确认当前环境已按 `wrangler.toml` 正确注入数据库绑定。",
+      message: translate(language, "error.databaseBindingMissing"),
       status: 500,
     };
   }
 
   return {
-    message: messages[0] ?? fallbackMessage,
+    message: localizeErrorMessage(
+      language,
+      messages[0] ?? translate(language, fallbackKey),
+      fallbackKey,
+    ),
     status: 400,
   };
 }
 
 export function resolveServerError(
   error: unknown,
-  fallbackMessage: string,
+  language: Language,
+  fallbackKey: TranslationKey,
 ): ApiErrorInfo {
-  const resolved = resolveApiError(error, fallbackMessage);
+  const resolved = resolveApiError(error, language, fallbackKey);
 
   return {
     ...resolved,

@@ -19,18 +19,28 @@ import {
   X,
 } from "lucide-react";
 
+import { AppBrand } from "@/components/app-brand";
+import { AutoResizeTextarea } from "@/components/auto-resize-textarea";
+import { useI18n } from "@/components/i18n-provider";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { PasswordField } from "@/components/password-field";
 import {
-  EDITOR_AUTOSAVE_DEBOUNCE_MS,
   BURN_MODE_OPTIONS,
   DEFAULT_EXPIRY_HOURS,
+  EDITOR_AUTOSAVE_DEBOUNCE_MS,
   EDITOR_POLL_INTERVAL_MS,
   EXPIRY_OPTIONS,
 } from "@/lib/constants";
+import {
+  getBurnModeLabel,
+  getEditableModeLabel,
+  getExpiryOptionLabel,
+  getShareStatusLabel,
+  localizeErrorMessage,
+  type ShareStatus,
+} from "@/lib/i18n";
+import { buildLanguageHeaders } from "@/lib/request-language";
 import { cn, formatAbsoluteDate } from "@/lib/utils";
-import { AutoResizeTextarea } from "@/components/auto-resize-textarea";
-import { AppBrand } from "@/components/app-brand";
 
 type EditableModeValue = "READ_ONLY" | "EDIT_LINK";
 type BurnModeValue = (typeof BURN_MODE_OPTIONS)[number]["value"];
@@ -63,7 +73,24 @@ function parseTokenFromHash() {
   return params.get("manage") ?? params.get("edit");
 }
 
+function getShareStatus(share: ManagePayload["share"]): ShareStatus {
+  if (share.deletedAt) {
+    return "deleted";
+  }
+
+  if (share.burnedAt) {
+    return "burned";
+  }
+
+  if (new Date(share.expiresAt) <= new Date()) {
+    return "expired";
+  }
+
+  return "available";
+}
+
 function CopyButton({ label, value }: { label: string; value: string }) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 
   return (
@@ -77,12 +104,13 @@ function CopyButton({ label, value }: { label: string; value: string }) {
       type="button"
     >
       <Copy size={16} />
-      {copied ? "已复制" : label}
+      {copied ? t("common.copied") : label}
     </button>
   );
 }
 
 export function ManageShareClient({ slug }: { slug: string }) {
+  const { language, t } = useI18n();
   const [token, setToken] = useState<string | null>(null);
   const [payload, setPayload] = useState<ManagePayload | null>(null);
   const [markdown, setMarkdown] = useState("");
@@ -105,6 +133,15 @@ export function ManageShareClient({ slug }: { slug: string }) {
   const savingRef = useRef(false);
   const hasUnsavedChangesRef = useRef(false);
 
+  const expiryOptions = useMemo(
+    () => EXPIRY_OPTIONS.map((option) => ({ ...option, label: getExpiryOptionLabel(language, option.hours) })),
+    [language],
+  );
+  const burnOptions = useMemo(
+    () => BURN_MODE_OPTIONS.map((option) => ({ ...option, label: getBurnModeLabel(language, option.value) })),
+    [language],
+  );
+
   const handleMarkdownChange = useCallback((nextMarkdown: string) => {
     lastInputAtRef.current = Date.now();
     setMarkdown(nextMarkdown);
@@ -116,16 +153,17 @@ export function ManageShareClient({ slug }: { slug: string }) {
         setLoading(true);
       }
 
-      const response = await fetch(`/api/shares/${slug}/manage`, {
-        headers: {
-          "x-share-token": currentToken,
-        },
-        cache: "no-store",
+        const response = await fetch(`/api/shares/${slug}/manage`, {
+          headers: {
+            ...buildLanguageHeaders(language),
+            "x-share-token": currentToken,
+          },
+          cache: "no-store",
       });
 
       const result = (await response.json()) as ManagePayload | { error: string };
       if (!response.ok || "error" in result) {
-        throw new Error("error" in result ? result.error : "读取失败");
+        throw new Error("error" in result ? result.error : t("error.readFailed"));
       }
 
       setPayload(result);
@@ -145,7 +183,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
 
       return result;
     },
-    [slug],
+    [language, slug, t],
   );
 
   useEffect(() => {
@@ -157,16 +195,22 @@ export function ManageShareClient({ slug }: { slug: string }) {
     setToken(currentToken);
 
     if (!currentToken) {
-      setError("链接缺少管理令牌或编辑令牌。");
+      setError(t("error.missingToken"));
       setLoading(false);
       return;
     }
 
     void loadManageShare(currentToken).catch((loadError) => {
-      setError(loadError instanceof Error ? loadError.message : "读取失败");
+      setError(
+        localizeErrorMessage(
+          language,
+          loadError instanceof Error ? loadError.message : t("error.readFailed"),
+          "error.readFailed",
+        ),
+      );
       setLoading(false);
     });
-  }, [loadManageShare]);
+  }, [language, loadManageShare, t]);
 
   useEffect(() => {
     if (!token) {
@@ -221,63 +265,77 @@ export function ManageShareClient({ slug }: { slug: string }) {
     hasUnsavedChangesRef.current = Boolean(payload && markdown !== payload.share.markdownContent);
   }, [markdown, payload]);
 
-  const saveContent = useCallback(async (force: boolean) => {
-    if (!token || !payload) {
-      return;
-    }
-
-    setSaving(true);
-    setInfo(null);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/shares/${slug}/manage`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-share-token": token,
-        },
-        body: JSON.stringify({
-          markdownContent: markdown,
-          lastKnownUpdatedAt: lastSyncedAtRef.current,
-          force,
-        }),
-      });
-
-      const result = (await response.json()) as
-        | {
-            conflict: boolean;
-            share: ManagePayload["share"];
-          }
-        | { error: string };
-
-      if (response.status === 409 && "share" in result) {
-        setRemoteConflict(result.share);
-        setInfo("检测到远端有更新，请决定是否覆盖。");
+  const saveContent = useCallback(
+    async (force: boolean) => {
+      if (!token || !payload) {
         return;
       }
 
-      if (!response.ok || "error" in result) {
-        throw new Error("error" in result ? result.error : "保存失败");
-      }
+      setSaving(true);
+      setInfo(null);
+      setError(null);
 
-      setPayload((current) =>
-        current
-          ? {
-              ...current,
-              share: result.share,
+      try {
+        const response = await fetch(`/api/shares/${slug}/manage`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...buildLanguageHeaders(language),
+            "x-share-token": token,
+          },
+          body: JSON.stringify({
+            markdownContent: markdown,
+            lastKnownUpdatedAt: lastSyncedAtRef.current,
+            force,
+          }),
+        });
+
+        const result = (await response.json()) as
+          | {
+              conflict: boolean;
+              share: ManagePayload["share"];
             }
-          : current,
-      );
-      lastSyncedAtRef.current = result.share.updatedAt;
-      setRemoteConflict(null);
-      setInfo(`已自动保存 · ${formatAbsoluteDate(result.share.updatedAt)}`);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "保存失败");
-    } finally {
-      setSaving(false);
-    }
-  }, [markdown, payload, slug, token]);
+          | { error: string };
+
+        if (response.status === 409 && "share" in result) {
+          setRemoteConflict(result.share);
+          setInfo(t("manage.remoteConflictTitle"));
+          return;
+        }
+
+        if (!response.ok || "error" in result) {
+          throw new Error("error" in result ? result.error : t("error.saveFailed"));
+        }
+
+        setPayload((current) =>
+          current
+            ? {
+                ...current,
+                share: result.share,
+              }
+            : current,
+        );
+        lastSyncedAtRef.current = result.share.updatedAt;
+        setRemoteConflict(null);
+        setInfo(
+          t("manage.infoAutoSaved", {
+            date: formatAbsoluteDate(result.share.updatedAt, language),
+          }),
+        );
+      } catch (saveError) {
+        setError(
+          localizeErrorMessage(
+            language,
+            saveError instanceof Error ? saveError.message : t("error.saveFailed"),
+            "error.saveFailed",
+          ),
+        );
+      } finally {
+        setSaving(false);
+      }
+    },
+    [language, markdown, payload, slug, t, token],
+  );
 
   useEffect(() => {
     if (!token || !payload) {
@@ -315,10 +373,11 @@ export function ManageShareClient({ slug }: { slug: string }) {
     try {
       const response = await fetch(`/api/shares/${slug}/settings`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "x-share-token": token,
-        },
+          headers: {
+            "Content-Type": "application/json",
+            ...buildLanguageHeaders(language),
+            "x-share-token": token,
+          },
         body: JSON.stringify({
           expiresInHours,
           password,
@@ -332,7 +391,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
         | { error: string };
 
       if (!response.ok || "error" in result) {
-        throw new Error("error" in result ? result.error : "保存设置失败");
+        throw new Error("error" in result ? result.error : t("error.saveSettingsFailed"));
       }
 
       setPayload({
@@ -340,15 +399,21 @@ export function ManageShareClient({ slug }: { slug: string }) {
         share: result.share,
       });
       lastSyncedAtRef.current = result.share.updatedAt;
-      setInfo("分享设置已更新。");
+      setInfo(t("manage.settingsSaved"));
 
       if (result.editorToken) {
         const editUrl = `${window.location.origin}/e/${slug}#edit=${result.editorToken}`;
         await navigator.clipboard.writeText(editUrl);
-        setInfo("已生成新的编辑链接并复制到剪贴板。");
+        setInfo(t("manage.newEditLinkCopied"));
       }
     } catch (settingsError) {
-      setError(settingsError instanceof Error ? settingsError.message : "保存设置失败");
+      setError(
+        localizeErrorMessage(
+          language,
+          settingsError instanceof Error ? settingsError.message : t("error.saveSettingsFailed"),
+          "error.saveSettingsFailed",
+        ),
+      );
     } finally {
       setSettingsSaving(false);
     }
@@ -359,7 +424,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
       return;
     }
 
-    if (!window.confirm("确认删除这份分享？删除后访问链接会立即失效。")) {
+    if (!window.confirm(t("manage.confirmDelete"))) {
       return;
     }
 
@@ -367,18 +432,25 @@ export function ManageShareClient({ slug }: { slug: string }) {
       const response = await fetch(`/api/shares/${slug}/manage`, {
         method: "DELETE",
         headers: {
+          ...buildLanguageHeaders(language),
           "x-share-token": token,
         },
       });
 
       const result = (await response.json()) as { success: boolean } | { error: string };
       if (!response.ok || "error" in result) {
-        throw new Error("error" in result ? result.error : "删除失败");
+        throw new Error("error" in result ? result.error : t("error.deleteFailed"));
       }
 
       window.location.href = "/";
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "删除失败");
+      setError(
+        localizeErrorMessage(
+          language,
+          deleteError instanceof Error ? deleteError.message : t("error.deleteFailed"),
+          "error.deleteFailed",
+        ),
+      );
     }
   }
 
@@ -399,7 +471,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
       <main className="viewer-shell">
         <div className="viewer-card">
           <LoaderCircle className="spin" size={22} />
-          正在加载管理界面...
+          {t("manage.loading")}
         </div>
       </main>
     );
@@ -410,10 +482,10 @@ export function ManageShareClient({ slug }: { slug: string }) {
       <main className="viewer-shell">
         <div className="viewer-card viewer-empty">
           <ShieldAlert size={24} />
-          <h1>无法打开编辑页</h1>
+          <h1>{t("manage.unableToOpen")}</h1>
           <p>{error}</p>
           <Link className="ghost-button" href="/">
-            返回首页
+            {t("public.backHome")}
           </Link>
         </div>
       </main>
@@ -424,13 +496,15 @@ export function ManageShareClient({ slug }: { slug: string }) {
     return null;
   }
 
+  const statusLabel = getShareStatusLabel(language, getShareStatus(payload.share));
+
   return (
     <main className="manage-shell">
       <header className="home-topbar">
-        <AppBrand note={payload.role === "owner" ? "管理模式" : "编辑模式"} />
+        <AppBrand note={payload.role === "owner" ? t("manage.note.owner") : t("manage.note.editor")} />
 
         <div className="topbar-actions topbar-actions-quiet">
-          <div className="view-toggle" role="tablist" aria-label="显示模式">
+          <div className="view-toggle" role="tablist" aria-label={t("common.displayMode")}>
             <button
               aria-selected={viewMode === "markdown"}
               className={cn("view-toggle-button", viewMode === "markdown" && "is-active")}
@@ -438,7 +512,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
               role="tab"
               type="button"
             >
-              Markdown
+              {t("common.markdown")}
             </button>
             <button
               aria-selected={viewMode === "preview"}
@@ -447,12 +521,12 @@ export function ManageShareClient({ slug }: { slug: string }) {
               role="tab"
               type="button"
             >
-              预览
+              {t("common.preview")}
             </button>
           </div>
           <Link className="ghost-button topbar-tool topbar-upload" href={accessUrl} target="_blank">
             <Eye size={16} />
-            预览公开页
+            {t("manage.previewPublic")}
           </Link>
           <button
             className="ghost-button topbar-tool topbar-tool-accent topbar-create"
@@ -460,7 +534,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
             type="button"
           >
             <Settings2 size={16} />
-            {payload.role === "owner" ? "链接与设置" : "链接信息"}
+            {payload.role === "owner" ? t("manage.linkAndSettings") : t("manage.linkInfo")}
           </button>
         </div>
       </header>
@@ -479,12 +553,12 @@ export function ManageShareClient({ slug }: { slug: string }) {
               </div>
             ) : (
               <div className="stage-pane stage-pane-preview">
-                  <div className="preview-panel preview-panel-readable">
-                    <div className="preview-inner">
-                      <MarkdownPreview copyable markdown={markdown} />
-                    </div>
+                <div className="preview-panel preview-panel-readable">
+                  <div className="preview-inner">
+                    <MarkdownPreview copyable markdown={markdown} />
                   </div>
                 </div>
+              </div>
             )}
           </div>
 
@@ -492,24 +566,22 @@ export function ManageShareClient({ slug }: { slug: string }) {
             <div className="warning-banner">
               <AlertTriangle size={18} />
               <div>
-                <strong>检测到远端更新</strong>
-                <p>有人已经改动了这份内容。你可以覆盖远端版本，或手动复制并合并。</p>
+                <strong>{t("manage.remoteConflictTitle")}</strong>
+                <p>{t("manage.remoteConflictBody")}</p>
               </div>
               <button className="ghost-button" onClick={() => void saveContent(true)} type="button">
-                覆盖保存
+                {t("manage.forceSave")}
               </button>
             </div>
           ) : null}
 
           <div className="editor-footbar">
             <div className="editor-stats">
-              <span>{stats.chars} 字符</span>
+              <span>{t("home.statsChars", { count: stats.chars })}</span>
               <span>{stats.sizeKB} KB</span>
             </div>
             <div className="toolbar-actions">
-              <p className="panel-subtitle">
-                {saving ? "正在自动保存..." : "已开启自动保存"}
-              </p>
+              <p className="panel-subtitle">{saving ? t("manage.autoSaving") : t("manage.autoSaveEnabled")}</p>
             </div>
           </div>
 
@@ -531,10 +603,10 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 <div className="modal-header">
                   <div className="modal-title">
                     <NotebookText size={18} />
-                    分享设置
+                    {t("manage.shareSettings")}
                   </div>
                   <button
-                    aria-label="关闭"
+                    aria-label={t("common.close")}
                     className="icon-button"
                     onClick={() => setDialogOpen(false)}
                     type="button"
@@ -544,22 +616,22 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 </div>
 
                 <div className="modal-summary">
-                  <span>{payload.share.statusLabel}</span>
-                  <span>到期 {formatAbsoluteDate(payload.share.expiresAt)}</span>
-                  <span>{editableMode === "EDIT_LINK" ? "可编辑链接" : "只读链接"}</span>
+                  <span>{statusLabel}</span>
+                  <span>{t("common.expiresAt", { date: formatAbsoluteDate(payload.share.expiresAt, language) })}</span>
+                  <span>{getEditableModeLabel(language, editableMode)}</span>
                 </div>
 
                 <label className="field">
                   <span>
                     <Clock3 size={16} />
-                    有效期
+                    {t("home.expiry")}
                   </span>
                   <select
                     className="field-control"
                     onChange={(event) => setExpiresInHours(Number(event.target.value))}
                     value={expiresInHours}
                   >
-                    {EXPIRY_OPTIONS.map((option) => (
+                    {expiryOptions.map((option) => (
                       <option key={option.hours} value={option.hours}>
                         {option.label}
                       </option>
@@ -568,10 +640,10 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 </label>
 
                 <label className="field">
-                  <span>重设密码</span>
+                  <span>{t("manage.resetPassword")}</span>
                   <PasswordField
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="留空表示关闭密码"
+                    placeholder={t("manage.resetPasswordPlaceholder")}
                     value={password}
                   />
                 </label>
@@ -579,14 +651,14 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 <label className="field">
                   <span>
                     <Flame size={16} />
-                    阅后即焚
+                    {t("home.burnMode")}
                   </span>
                   <select
                     className="field-control"
                     onChange={(event) => setBurnMode(event.target.value as BurnModeValue)}
                     value={burnMode}
                   >
-                    {BURN_MODE_OPTIONS.map((option) => (
+                    {burnOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
@@ -597,15 +669,15 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 <label className="field">
                   <span>
                     <PencilLine size={16} />
-                    编辑权限
+                    {t("home.editPermissions")}
                   </span>
                   <select
                     className="field-control"
                     onChange={(event) => setEditableMode(event.target.value as EditableModeValue)}
                     value={editableMode}
                   >
-                    <option value="READ_ONLY">只读</option>
-                    <option value="EDIT_LINK">持有编辑链接可编辑</option>
+                    <option value="READ_ONLY">{getEditableModeLabel(language, "READ_ONLY")}</option>
+                    <option value="EDIT_LINK">{getEditableModeLabel(language, "EDIT_LINK")}</option>
                   </select>
                 </label>
 
@@ -615,12 +687,12 @@ export function ManageShareClient({ slug }: { slug: string }) {
                   onClick={() => void saveSettings()}
                   type="button"
                 >
-                  {settingsSaving ? "保存中..." : "保存分享设置"}
+                  {settingsSaving ? t("manage.saving") : t("manage.saveShareSettings")}
                 </button>
 
                 <button className="danger-button" onClick={() => void handleDelete()} type="button">
                   <Trash2 size={17} />
-                  删除分享
+                  {t("manage.deleteShare")}
                 </button>
               </div>
             ) : (
@@ -628,10 +700,10 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 <div className="modal-header">
                   <div className="modal-title">
                     <Link2 size={18} />
-                    链接信息
+                    {t("manage.linkInfo")}
                   </div>
                   <button
-                    aria-label="关闭"
+                    aria-label={t("common.close")}
                     className="icon-button"
                     onClick={() => setDialogOpen(false)}
                     type="button"
@@ -641,27 +713,27 @@ export function ManageShareClient({ slug }: { slug: string }) {
                 </div>
 
                 <div className="modal-summary">
-                  <span>{payload.share.statusLabel}</span>
-                  <span>到期 {formatAbsoluteDate(payload.share.expiresAt)}</span>
+                  <span>{statusLabel}</span>
+                  <span>{t("common.expiresAt", { date: formatAbsoluteDate(payload.share.expiresAt, language) })}</span>
                 </div>
 
                 <div className="link-card">
-                  <span>访问链接</span>
+                  <span>{t("home.accessLink")}</span>
                   <code>{accessUrl}</code>
                   <div className="link-actions">
-                    <CopyButton label="复制访问链接" value={accessUrl} />
+                    <CopyButton label={t("home.copyAccessLink")} value={accessUrl} />
                     <Link className="ghost-button" href={accessUrl} target="_blank">
-                      打开
+                      {t("common.open")}
                       <ArrowUpRight size={15} />
                     </Link>
                   </div>
                 </div>
 
                 <div className="link-card">
-                  <span>当前编辑链接</span>
+                  <span>{t("manage.currentEditLink")}</span>
                   <code>{currentUrl}</code>
                   <div className="link-actions">
-                    <CopyButton label="复制当前链接" value={currentUrl} />
+                    <CopyButton label={t("home.copyEditLink")} value={currentUrl} />
                   </div>
                 </div>
               </div>
@@ -671,32 +743,32 @@ export function ManageShareClient({ slug }: { slug: string }) {
               <div className="share-modal-right">
                 <div className="modal-title">
                   <Link2 size={18} />
-                  链接信息
+                  {t("manage.linkInfo")}
                 </div>
 
                 <div className="modal-summary">
-                  <span>创建于 {formatAbsoluteDate(payload.share.createdAt)}</span>
-                  <span>{payload.share.burnMode === "OFF" ? "不焚毁" : "阅后即焚"}</span>
+                  <span>{t("common.createdAt", { date: formatAbsoluteDate(payload.share.createdAt, language) })}</span>
+                  <span>{payload.share.burnMode === "OFF" ? t("manage.noBurn") : t("manage.burnEnabled")}</span>
                 </div>
 
                 <div className="link-list">
                   <div className="link-card">
-                    <span>访问链接</span>
+                    <span>{t("home.accessLink")}</span>
                     <code>{accessUrl}</code>
                     <div className="link-actions">
-                      <CopyButton label="复制访问链接" value={accessUrl} />
+                      <CopyButton label={t("home.copyAccessLink")} value={accessUrl} />
                       <Link className="ghost-button" href={accessUrl} target="_blank">
-                        打开
+                        {t("common.open")}
                         <ArrowUpRight size={15} />
                       </Link>
                     </div>
                   </div>
 
                   <div className="link-card">
-                    <span>当前管理链接</span>
+                    <span>{t("manage.currentManageLink")}</span>
                     <code>{currentUrl}</code>
                     <div className="link-actions">
-                      <CopyButton label="复制管理链接" value={currentUrl} />
+                      <CopyButton label={t("home.copyManageLink")} value={currentUrl} />
                     </div>
                   </div>
                 </div>
@@ -707,7 +779,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
       ) : null}
 
       <div className="mobile-bottom-bar">
-        <div className="view-toggle" role="tablist" aria-label="显示模式">
+        <div className="view-toggle" role="tablist" aria-label={t("common.displayMode")}>
           <button
             aria-selected={viewMode === "markdown"}
             className={cn("view-toggle-button", viewMode === "markdown" && "is-active")}
@@ -715,7 +787,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
             role="tab"
             type="button"
           >
-            Markdown
+            {t("common.markdown")}
           </button>
           <button
             aria-selected={viewMode === "preview"}
@@ -724,12 +796,12 @@ export function ManageShareClient({ slug }: { slug: string }) {
             role="tab"
             type="button"
           >
-            预览
+            {t("common.preview")}
           </button>
         </div>
         <Link className="ghost-button topbar-tool topbar-upload" href={accessUrl} target="_blank">
           <Eye size={16} />
-          预览
+          {t("common.preview")}
         </Link>
         <button
           className="ghost-button topbar-tool topbar-tool-accent topbar-create"
@@ -737,7 +809,7 @@ export function ManageShareClient({ slug }: { slug: string }) {
           type="button"
         >
           <Settings2 size={16} />
-          设置
+          {t("manage.settings")}
         </button>
       </div>
     </main>

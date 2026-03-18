@@ -14,6 +14,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy } from "lucide-react";
 
+import { useI18n } from "@/components/i18n-provider";
+import { getHtmlLang } from "@/lib/i18n";
 import { optimizeChineseTypography } from "@/lib/utils";
 
 type MarkdownPreviewProps = {
@@ -178,12 +180,15 @@ function optimizePreviewTypography(root: HTMLElement) {
 
 export function MarkdownPreview({
   markdown,
-  emptyLabel = "这里会实时渲染 Markdown 预览，并自动优化中文排版",
+  emptyLabel,
   copyable = false,
-  copyLabel = "复制排版",
+  copyLabel,
 }: MarkdownPreviewProps) {
+  const { language, t } = useI18n();
   const previewRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+  const resolvedEmptyLabel = emptyLabel ?? t("markdown.emptyPreview");
+  const resolvedCopyLabel = copyLabel ?? t("common.copyTypography");
 
   useLayoutEffect(() => {
     if (!previewRef.current) {
@@ -226,7 +231,7 @@ export function MarkdownPreview({
   }
 
   if (!markdown.trim()) {
-    return <div className="empty-preview">{emptyLabel}</div>;
+    return <div className="empty-preview">{resolvedEmptyLabel}</div>;
   }
 
   function ResponsiveTable({ children }: { children?: ReactNode }) {
@@ -244,18 +249,18 @@ export function MarkdownPreview({
       {copyable ? (
         <div className="markdown-preview-actions">
           <button
-            aria-label={copyLabel}
+            aria-label={resolvedCopyLabel}
             className="preview-copy-button"
             onClick={() => void handleCopyPreview()}
             type="button"
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
-            <span>{copied ? "已复制" : copyLabel}</span>
+            <span>{copied ? t("common.copied") : resolvedCopyLabel}</span>
           </button>
         </div>
       ) : null}
 
-      <div ref={previewRef} className="markdown-body" lang="zh-CN">
+      <div ref={previewRef} className="markdown-body" lang={getHtmlLang(language)}>
         <ReactMarkdown
           components={{
             a: ({ children, ...props }) => (

@@ -5,8 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Copy, Download, Flame, KeyRound, Link2, LoaderCircle, ShieldAlert } from "lucide-react";
 
 import { AppBrand } from "@/components/app-brand";
+import { useI18n } from "@/components/i18n-provider";
 import { MarkdownPreview } from "@/components/markdown-preview";
 import { PasswordField } from "@/components/password-field";
+import { localizeErrorMessage } from "@/lib/i18n";
+import { buildLanguageHeaders } from "@/lib/request-language";
 import { formatAbsoluteDate, formatRelativeCountdown } from "@/lib/utils";
 
 export type PublicPayload =
@@ -33,13 +36,6 @@ export type PublicPayload =
       state: "expired" | "burned" | "deleted" | "not_found";
     };
 
-const unavailableCopy: Record<string, string> = {
-  expired: "这个分享链接已经过期。",
-  burned: "这份内容已经焚毁，无法再次访问。",
-  deleted: "这份内容已经被删除。",
-  not_found: "没有找到对应的分享内容。",
-};
-
 export function PublicShareClient({
   slug,
   initialPayload,
@@ -47,6 +43,7 @@ export function PublicShareClient({
   slug: string;
   initialPayload: PublicPayload;
 }) {
+  const { language, t } = useI18n();
   const [payload, setPayload] = useState<PublicPayload>(initialPayload);
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -65,10 +62,11 @@ export function PublicShareClient({
       return null;
     }
 
-    return `到期时间：${formatAbsoluteDate(payload.share.expiresAt)} · ${
-      formatRelativeCountdown(payload.share.expiresAt) ?? "可用"
-    }`;
-  }, [payload]);
+    return t("public.statusLine", {
+      absolute: formatAbsoluteDate(payload.share.expiresAt, language),
+      relative: formatRelativeCountdown(payload.share.expiresAt, language) ?? t("status.available"),
+    });
+  }, [language, payload, t]);
 
   async function handleUnlock(confirmView: boolean) {
     setSubmitting(true);
@@ -79,6 +77,7 @@ export function PublicShareClient({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...buildLanguageHeaders(language),
         },
         body: JSON.stringify({
           password,
@@ -95,7 +94,13 @@ export function PublicShareClient({
         setPayload(result);
       }
     } catch (unlockError) {
-      setError(unlockError instanceof Error ? unlockError.message : "访问失败");
+      setError(
+        localizeErrorMessage(
+          language,
+          unlockError instanceof Error ? unlockError.message : t("error.readFailed"),
+          "error.readFailed",
+        ),
+      );
     } finally {
       setSubmitting(false);
     }
@@ -136,20 +141,27 @@ export function PublicShareClient({
     payload.state === "burned" ||
     payload.state === "deleted"
   ) {
-    const message = unavailableCopy[payload?.state ?? "not_found"];
+    const message =
+      payload?.state === "expired"
+        ? t("public.state.expired")
+        : payload?.state === "burned"
+          ? t("public.state.burned")
+          : payload?.state === "deleted"
+            ? t("public.state.deleted")
+            : t("public.state.notFound");
 
     return (
       <main className="viewer-shell">
         <header className="home-topbar viewer-topbar">
-          <AppBrand note="只读访问" />
+          <AppBrand note={t("public.note.readOnly")} />
         </header>
         <section className="viewer-stage">
           <div className="viewer-card viewer-empty viewer-inline-card viewer-state-card">
             <ShieldAlert size={24} />
-            <h1>链接不可用</h1>
+            <h1>{t("public.linkUnavailable")}</h1>
             <p>{message}</p>
             <Link className="ghost-button" href="/">
-              返回首页
+              {t("public.backHome")}
             </Link>
           </div>
         </section>
@@ -161,7 +173,7 @@ export function PublicShareClient({
     return (
       <main className="viewer-shell">
         <header className="home-topbar viewer-topbar">
-          <AppBrand note="受保护访问" />
+          <AppBrand note={t("public.note.protected")} />
           {statusLine ? <p className="topbar-note">{statusLine}</p> : null}
         </header>
         <section className="viewer-stage">
@@ -171,12 +183,12 @@ export function PublicShareClient({
           >
             <div className="viewer-gated-header">
               <div className="modal-summary">
-                {payload.passwordRequired ? <span>需要密码</span> : null}
-                {payload.burnConfirmationRequired ? <span>确认查看后销毁</span> : null}
+                {payload.passwordRequired ? <span>{t("public.passwordRequired")}</span> : null}
+                {payload.burnConfirmationRequired ? (
+                  <span>{t("public.burnConfirmationRequired")}</span>
+                ) : null}
               </div>
-              <p className="muted-line viewer-gated-copy">
-                验证通过后直接显示正文，页面不会跳转。
-              </p>
+              <p className="muted-line viewer-gated-copy">{t("public.gatedCopy")}</p>
             </div>
 
             <div className="viewer-gated-body">
@@ -184,12 +196,12 @@ export function PublicShareClient({
                 <label className="field">
                   <span>
                     <KeyRound size={16} />
-                    输入访问密码
+                    {t("public.enterPassword")}
                   </span>
                   <PasswordField
                     disabled={submitting}
                     onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Password"
+                    placeholder={t("public.passwordPlaceholder")}
                     value={password}
                   />
                 </label>
@@ -199,8 +211,8 @@ export function PublicShareClient({
                 <div className="burn-banner burn-banner-soft">
                   <Flame size={18} />
                   <div>
-                    <strong>阅后即焚已开启</strong>
-                    <p>确认查看后会开始销毁流程，机器人预览不会直接触发焚毁。</p>
+                    <strong>{t("public.burnTitle")}</strong>
+                    <p>{t("public.burnBody")}</p>
                   </div>
                 </div>
               ) : null}
@@ -216,7 +228,7 @@ export function PublicShareClient({
                 type="button"
               >
                 {submitting ? <LoaderCircle className="spin" size={18} /> : <Link2 size={18} />}
-                {submitting ? "正在准备内容..." : "查看内容"}
+                {submitting ? t("public.preparing") : t("public.viewContent")}
               </button>
             </div>
           </div>
@@ -232,33 +244,33 @@ export function PublicShareClient({
   return (
     <main className="viewer-shell">
       <header className="home-topbar viewer-topbar">
-        <AppBrand note="只读访问" />
+        <AppBrand note={t("public.note.readOnly")} />
         <div className="topbar-actions topbar-actions-quiet">
           {statusLine ? <p className="topbar-note topbar-note-inline">{statusLine}</p> : null}
           <button className="ghost-button topbar-tool" onClick={() => void handleCopyMarkdown()} type="button">
             <Copy size={16} />
-            {copied ? "已复制" : "复制 Markdown"}
+            {copied ? t("common.copied") : t("public.copyMarkdown")}
           </button>
           <button className="ghost-button topbar-tool" onClick={handleDownloadMarkdown} type="button">
             <Download size={16} />
-            下载 .md
+            {t("public.downloadMd")}
           </button>
         </div>
       </header>
       <section className="viewer-stage">
         <article className="viewer-card viewer-inline-card viewer-content viewer-content-appear">
-          <MarkdownPreview markdown={payload.share.markdownContent} emptyLabel="这份分享还没有正文" />
+          <MarkdownPreview markdown={payload.share.markdownContent} emptyLabel={t("public.emptyContent")} />
         </article>
       </section>
 
       <div className="mobile-bottom-bar">
         <button className="ghost-button topbar-tool" onClick={() => void handleCopyMarkdown()} type="button">
           <Copy size={16} />
-          {copied ? "已复制" : "复制 Markdown"}
+          {copied ? t("common.copied") : t("public.copyMarkdown")}
         </button>
         <button className="ghost-button topbar-tool" onClick={handleDownloadMarkdown} type="button">
           <Download size={16} />
-          下载 .md
+          {t("public.downloadMd")}
         </button>
       </div>
     </main>

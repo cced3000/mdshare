@@ -4,6 +4,8 @@ import { Eye, EyeOff } from "lucide-react";
 import { useId, useState } from "react";
 import type { ChangeEvent } from "react";
 
+import { useI18n } from "@/components/i18n-provider";
+
 type PasswordFieldProps = {
   className?: string;
   disabled?: boolean;
@@ -19,6 +21,7 @@ export function PasswordField({
   placeholder,
   value,
 }: PasswordFieldProps) {
+  const { t } = useI18n();
   const [visible, setVisible] = useState(false);
   const buttonId = useId();
 
@@ -35,7 +38,7 @@ export function PasswordField({
       />
       <button
         id={buttonId}
-        aria-label={visible ? "隐藏密码" : "显示密码"}
+        aria-label={visible ? t("password.hide") : t("password.show")}
         aria-pressed={visible}
         className="password-visibility-button"
         disabled={disabled}

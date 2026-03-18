@@ -5,6 +5,11 @@ import { getDb } from "@/lib/db";
 import { shares, shareViews } from "@/lib/schema";
 import { BURN_GRACE_MINUTES, DEFAULT_EXPIRY_HOURS, EXPIRY_OPTIONS } from "@/lib/constants";
 import {
+  DEFAULT_LANGUAGE,
+  getShareStatusLabel,
+  type Language,
+} from "@/lib/i18n";
+import {
   addHours,
   formatAbsoluteDate,
   generateSlug,
@@ -59,10 +64,17 @@ function getExpiryIso(hours?: number) {
   return addHours(hours).toISOString();
 }
 
-function serializeShare(share: ShareRow) {
+function serializeShare(share: ShareRow, language: Language = DEFAULT_LANGUAGE) {
   const burnDeadline = share.firstViewedAt
     ? getBurnDeadline(new Date(share.firstViewedAt))
     : null;
+  const status = share.deletedAt
+    ? "deleted"
+    : share.burnedAt
+      ? "burned"
+      : new Date(share.expiresAt) <= new Date()
+        ? "expired"
+        : "available";
 
   return {
     slug: share.slug,
@@ -76,14 +88,8 @@ function serializeShare(share: ShareRow) {
     burnDeadline: burnDeadline?.toISOString() ?? null,
     deletedAt: share.deletedAt,
     burnedAt: share.burnedAt,
-    statusLabel: share.deletedAt
-      ? "已删除"
-      : share.burnedAt
-        ? "已焚毁"
-        : new Date(share.expiresAt) <= new Date()
-          ? "已过期"
-          : "可用",
-    expiresAtLabel: formatAbsoluteDate(share.expiresAt),
+    statusLabel: getShareStatusLabel(language, status),
+    expiresAtLabel: formatAbsoluteDate(share.expiresAt, language),
   };
 }
 
@@ -155,7 +161,10 @@ async function insertShareView(shareId: string, confirmed: boolean, viewer?: Vie
   });
 }
 
-export async function createShare(input: CreateShareInput) {
+export async function createShare(
+  input: CreateShareInput,
+  language: Language = DEFAULT_LANGUAGE,
+) {
   const markdownContent = normalizeMarkdown(input.markdownContent);
   validateMarkdownSize(markdownContent);
 
@@ -191,13 +200,16 @@ export async function createShare(input: CreateShareInput) {
   await db.insert(shares).values(shareData);
 
   return {
-    share: serializeShare(shareData),
+    share: serializeShare(shareData, language),
     ownerToken,
     editorToken,
   };
 }
 
-export async function getPublicShare(slug: string) {
+export async function getPublicShare(
+  slug: string,
+  language: Language = DEFAULT_LANGUAGE,
+) {
   const share = await findShareBySlug(slug);
 
   if (!share) {
@@ -226,14 +238,15 @@ export async function getPublicShare(slug: string) {
 
   return {
     state: "available" as PublicState,
-    share: serializeShare(share),
+    share: serializeShare(share, language),
   };
 }
 
 export async function unlockPublicShare(
   slug: string,
-  options: { password?: string; confirmView?: boolean; viewer?: ViewerContext },
+  options: { password?: string; confirmView?: boolean; viewer?: ViewerContext; language?: Language },
 ) {
+  const language = options.language ?? DEFAULT_LANGUAGE;
   const share = await findShareBySlug(slug);
   if (!share) {
     return { state: "not_found" as PublicState };
@@ -257,7 +270,7 @@ export async function unlockPublicShare(
     await insertShareView(share.id, true, options.viewer);
     return {
       state: "available" as PublicState,
-      share: serializeShare(share),
+      share: serializeShare(share, language),
     };
   }
 
@@ -295,7 +308,7 @@ export async function unlockPublicShare(
         firstViewedAt: timestamp,
         burnedAt: timestamp,
         updatedAt: timestamp,
-      }),
+      }, language),
     };
   }
 
@@ -312,7 +325,7 @@ export async function unlockPublicShare(
 
   return {
     state: "available" as PublicState,
-    share: serializeShare(share),
+    share: serializeShare(share, language),
   };
 }
 
@@ -339,11 +352,15 @@ export async function authenticateShareToken(slug: string, token: string | null)
   throw new Error("令牌无效");
 }
 
-export async function getManageShare(slug: string, token: string | null) {
+export async function getManageShare(
+  slug: string,
+  token: string | null,
+  language: Language = DEFAULT_LANGUAGE,
+) {
   const { share, role } = await authenticateShareToken(slug, token);
   return {
     role,
-    share: serializeShare(share),
+    share: serializeShare(share, language),
   };
 }
 
@@ -353,7 +370,9 @@ export async function saveShareContent(options: {
   markdownContent: string;
   lastKnownUpdatedAt?: string | null;
   force?: boolean;
+  language?: Language;
 }) {
+  const language = options.language ?? DEFAULT_LANGUAGE;
   const { share, role } = await authenticateShareToken(options.slug, options.token);
   const markdownContent = normalizeMarkdown(options.markdownContent);
   validateMarkdownSize(markdownContent);
@@ -370,7 +389,7 @@ export async function saveShareContent(options: {
     return {
       conflict: true,
       role,
-      share: serializeShare(share),
+      share: serializeShare(share, language),
     };
   }
 
@@ -389,7 +408,7 @@ export async function saveShareContent(options: {
   return {
     conflict: false,
     role,
-    share: serializeShare(updated),
+    share: serializeShare(updated, language),
   };
 }
 
@@ -400,7 +419,9 @@ export async function updateShareSettings(options: {
   password?: string;
   burnMode: BurnMode;
   editableMode: EditableMode;
+  language?: Language;
 }) {
+  const language = options.language ?? DEFAULT_LANGUAGE;
   const { share, role } = await authenticateShareToken(options.slug, options.token);
   if (role !== "owner") {
     throw new Error("只有管理链接可以修改分享设置");
@@ -441,7 +462,7 @@ export async function updateShareSettings(options: {
 
   return {
     role,
-    share: serializeShare(updated),
+    share: serializeShare(updated, language),
     editorToken,
   };
 }

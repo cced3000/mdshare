@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveApiError } from "@/lib/api-errors";
+import { getRequestLanguage } from "@/lib/request-language";
 import { getPublicShare, unlockPublicShare } from "@/lib/share-service";
 
 const unlockSchema = z.object({
@@ -18,18 +19,19 @@ function getViewerContext(request: Request) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const language = getRequestLanguage(request);
   const { slug } = await context.params;
 
   try {
-    const result = await getPublicShare(slug);
+    const result = await getPublicShare(slug, language);
     const status = result.state === "not_found" ? 404 : 200;
 
     return NextResponse.json(result, { status });
   } catch (error) {
-    const { message, status } = resolveApiError(error, "访问分享时发生未知错误");
+    const { message, status } = resolveApiError(error, language, "error.readFailed");
     return NextResponse.json({ error: message }, { status });
   }
 }
@@ -38,12 +40,14 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const language = getRequestLanguage(request);
   const { slug } = await context.params;
 
   try {
     const payload = unlockSchema.parse(await request.json());
     const result = await unlockPublicShare(slug, {
       ...payload,
+      language,
       viewer: getViewerContext(request),
     });
 
@@ -56,7 +60,7 @@ export async function POST(
 
     return NextResponse.json(result, { status });
   } catch (error) {
-    const { message, status } = resolveApiError(error, "访问分享时发生未知错误");
+    const { message, status } = resolveApiError(error, language, "error.readFailed");
     return NextResponse.json({ error: message }, { status });
   }
 }

@@ -1,85 +1,233 @@
 # MDShare
 
-一个基于 Next.js 的临时 Markdown 分享服务。本项目已适配 Cloudflare Workers + D1，可直接部署到 Cloudflare。
+MDShare is a lightweight Markdown sharing app built with Next.js and deployed on Cloudflare Workers + D1.
 
-## 功能特性
+It is designed for fast, anonymous sharing: paste Markdown, generate a short link, optionally protect it with a password, and keep separate access, edit, and manage capabilities without requiring user accounts.
 
-- 无需登录即可创建分享，生成短链接
-- 支持上传 `.md` / `.txt` 或直接粘贴文本
-- PC / 移动端统一的轻量阅读与编辑体验
-- 访问控制：到期时间、密码访问、**阅后即焚**
-- 权限隔离：区分「公开访问链接」、「编辑链接」与「管理链接」
-- 匿名保护：支持无感修改与随时主动删除
+## Features
 
-## 开发与部署 (Cloudflare Workers + D1)
+- Create short-lived Markdown shares without signing in
+- Paste content directly or upload `.md`, `.markdown`, `.txt`, or plain text files
+- Readable Markdown preview with improved Chinese typography and cleaner mixed CJK / English spacing
+- Responsive editing experience for desktop and mobile
+- Password-protected shares
+- Burn-after-read modes:
+  - Disable burn
+  - Expire 10 minutes after first confirmed view
+  - Expire immediately after first confirmed view
+- Separate link capabilities:
+  - Public access link
+  - Optional edit link
+  - Owner/manage link
+- Anonymous ownership and follow-up management without an account system
+- Inline password visibility toggles in create, manage, and gated public views
 
-本项目采用了 **Cloudflare Workers**、**Cloudflare D1** 和 **OpenNext for Cloudflare**。
+## Tech Stack
 
-### 1. 本地开发环境准备
+- Next.js 16
+- React 19
+- Cloudflare Workers
+- Cloudflare D1
+- OpenNext for Cloudflare
+- Drizzle ORM
+- TypeScript
 
-请确保你使用 `pnpm` 作为包管理器：
+## Project Structure
+
+- `src/app` — Next.js app routes and API routes
+- `src/components` — UI components for create, manage, public share, preview, and form controls
+- `src/lib` — database schema, share service, helpers, and API error mapping
+- `migrations` — D1 SQL migrations
+- `scripts` — build-time helper scripts, including the OpenNext post-build patch
+- `skills` — project-specific agent skill definitions and references
+
+## Skills
+
+This repository includes a project skill for agent-driven MDShare operations:
+
+- `skills/mdshare-agent/SKILL.md`
+
+The `mdshare-agent` skill is intended for AI agents that need to operate MDShare directly, for example:
+
+- create a temporary Markdown share and return public / edit / manage links
+- read an existing public share
+- unlock password-protected or burn-after-read shares
+- continue editing through an edit or manage token
+- update share settings or delete a share
+
+### Default Skill Target
+
+The bundled skill is configured around the current production deployment:
+
+- Base URL: `https://share.yekyos.com`
+
+If you deploy MDShare to another domain or Workers URL, the skill can be adapted to point to that environment instead.
+
+### Skill References
+
+Additional reference material is included here:
+
+- `skills/mdshare-agent/references/api.md` — endpoint and payload reference
+- `skills/mdshare-agent/references/workflows.md` — end-to-end agent workflows
+- `skills/mdshare-agent/references/install-examples.md` — installation and usage examples
+
+### When to Use the Skill
+
+Use the skill when the task is operational, such as:
+
+- “share this markdown”
+- “generate a temporary link”
+- “read this MDShare link”
+- “update this existing share”
+- “delete this temporary share”
+
+Do not use the skill when the task only needs local formatting, previewing, or Markdown cleanup without creating a share.
+
+## Local Development
+
+### Prerequisites
+
+- Node.js 22+
+- `pnpm`
+- Wrangler CLI authentication for Cloudflare workflows
+
+Install dependencies:
 
 ```bash
 pnpm install
 ```
 
-然后登录 Wrangler：
+Log in to Wrangler:
 
 ```bash
 pnpm exec wrangler login
 ```
 
-初始化本地 D1 数据库并创建表结构：
+Apply the local D1 schema:
 
 ```bash
 pnpm run db:migrate:local
 ```
 
-启动本地开发服务器：
+Start the app:
 
 ```bash
 pnpm run dev
 ```
-打开 [http://localhost:3000](http://localhost:3000) 即可开始开发。
 
-### 2. 预览 Cloudflare 生产构建
+Then open [http://localhost:3000](http://localhost:3000).
 
-Cloudflare 的生产产物由 OpenNext 生成：
+## D1 Notes
+
+If you see errors such as:
+
+- `no such table: shares`
+- `no such table: share_views`
+
+your local or remote D1 database has not been migrated yet.
+
+Use:
 
 ```bash
-pnpm run cf:build
-pnpm wrangler dev
+pnpm run db:migrate:local
 ```
 
-如果你在 Windows 上执行 `cf:build`，建议放到 WSL 里运行。OpenNext 官方当前对 Linux / macOS 支持更稳定，Windows 上常见问题是符号链接创建失败。
-
-### 3. 部署到 Cloudflare
-
-1. 在 Cloudflare 面板里创建 D1 数据库。
-2. 复制 `wrangler.example.toml` 为本地 `wrangler.toml`，填入真实的 `database_id`。
-3. 推送线上表结构：
+for local development, or:
 
 ```bash
 pnpm run db:migrate
 ```
 
-4. 构建 Cloudflare Worker 产物：
+for the remote Cloudflare database.
+
+## Build for Cloudflare
+
+Cloudflare production output is generated through OpenNext:
 
 ```bash
 pnpm run cf:build
 ```
 
-5. 发布：
+The build script also runs a post-build patch:
 
 ```bash
-pnpm wrangler deploy
+node scripts/patch_opennext_require_resolve.mjs
 ```
 
-部署成功后，Wrangler 会输出 `workers.dev` 访问地址。
+This patch works around an OpenNext runtime issue where `__require.resolve(...)` can remain in the generated worker bundle and crash on Cloudflare Workers.
 
-## 维护与清理
+## Preview the Cloudflare Build
 
-过期与焚毁的页面数据将通过 Next.js `/api/clean` API 路由进行清扫。
+```bash
+pnpm run cf:build
+pnpm run cf:preview
+```
 
-你可以通过给 API 传递验证密钥防止被恶意调用。
-你也可以在 Cloudflare 的 **Cron Triggers** 中定时触发该接口。
+## Deploy to Cloudflare
+
+1. Create a D1 database in Cloudflare.
+2. Copy `wrangler.example.toml` to `wrangler.toml` if needed and set the correct `database_id`.
+3. Apply remote migrations:
+
+```bash
+pnpm run db:migrate
+```
+
+4. Build the worker bundle:
+
+```bash
+pnpm run cf:build
+```
+
+5. Deploy:
+
+```bash
+pnpm exec wrangler deploy
+```
+
+## Windows / WSL Caveat
+
+OpenNext for Cloudflare is significantly more reliable in Linux or WSL than in native Windows environments.
+
+On Windows, you may run into issues such as:
+
+- locked `.open-next` directories
+- `EBUSY` when cleaning build output
+- `EPERM` when creating symlinks during bundling
+
+If that happens, run Cloudflare builds and deployments from WSL:
+
+```bash
+pnpm run cf:build
+pnpm exec wrangler deploy
+```
+
+## Useful Scripts
+
+- `pnpm run dev` — start local Next.js development server
+- `pnpm run build` — production Next.js build
+- `pnpm run start` — start the production Next.js server
+- `pnpm run lint` — run ESLint
+- `pnpm run cf:build` — build the Cloudflare worker bundle and patch OpenNext output
+- `pnpm run cf:preview` — preview the Cloudflare worker locally
+- `pnpm run cf:deploy` — deploy using OpenNext’s Cloudflare deploy command
+- `pnpm run db:migrate:local` — apply D1 migrations locally
+- `pnpm run db:migrate` — apply D1 migrations to the remote database
+
+## Cleanup Endpoint
+
+Expired and burned shares are cleaned up through the `/api/clean` route.
+
+You can protect that route with a secret and trigger it from Cloudflare Cron Triggers.
+
+## Current Product Behavior
+
+- The home page is a focused Markdown composer with a real-time preview
+- Public share pages are read-only
+- The public result page does not show the “copy formatted preview” action
+- Password fields support show / hide toggles
+- Share management supports editing content, changing settings, and deleting the share
+
+## License
+
+This repository currently does not include a dedicated license file.

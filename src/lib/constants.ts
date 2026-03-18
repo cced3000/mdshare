@@ -6,17 +6,17 @@ export const EDITOR_POLL_INTERVAL_MS = 5000;
 export const EDITOR_AUTOSAVE_DEBOUNCE_MS = 1200;
 
 export const EXPIRY_OPTIONS = [
-  { label: "1 小时", hours: 1 },
-  { label: "1 天", hours: 24 },
-  { label: "7 天", hours: 24 * 7 },
-  { label: "30 天", hours: 24 * 30 },
+  { hours: 1 },
+  { hours: 24 },
+  { hours: 24 * 7 },
+  { hours: 24 * 30 },
 ] as const;
 
 export const DEFAULT_EXPIRY_HOURS = 24 * 7;
 export const DRAFT_STORAGE_KEY = "mdshare:draft:v1";
 
 export const BURN_MODE_OPTIONS = [
-  { label: "关闭", value: "OFF" },
-  { label: "首次查看后 10 分钟销毁", value: "AFTER_FIRST_VIEW_GRACE" },
-  { label: "首次查看后立即失效", value: "AFTER_FIRST_VIEW_INSTANT" },
+  { value: "OFF" },
+  { value: "AFTER_FIRST_VIEW_GRACE" },
+  { value: "AFTER_FIRST_VIEW_INSTANT" },
 ] as const;

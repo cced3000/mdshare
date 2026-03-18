@@ -1,5 +1,10 @@
 import { customAlphabet, nanoid } from "nanoid";
 
+import {
+  DEFAULT_LANGUAGE,
+  getLocaleForLanguage,
+  type Language,
+} from "@/lib/i18n";
 import { BURN_GRACE_MINUTES, MAX_MARKDOWN_BYTES } from "@/lib/constants";
 
 const slugAlphabet =
@@ -83,39 +88,49 @@ export function inferTitle(title: string | null | undefined, markdown: string) {
 export function validateMarkdownSize(markdown: string) {
   const size = new TextEncoder().encode(markdown).length;
   if (size > MAX_MARKDOWN_BYTES) {
-    throw new Error(`Markdown 文件不能超过 ${Math.floor(MAX_MARKDOWN_BYTES / 1024)} KB`);
+    throw new Error(`Markdown must be smaller than ${Math.floor(MAX_MARKDOWN_BYTES / 1024)} KB`);
   }
 }
 
-export function formatAbsoluteDate(value: string | Date) {
-  return new Intl.DateTimeFormat("zh-CN", {
+export function formatAbsoluteDate(
+  value: string | Date,
+  language: Language = DEFAULT_LANGUAGE,
+) {
+  return new Intl.DateTimeFormat(getLocaleForLanguage(language), {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
 }
 
-export function formatRelativeCountdown(target: string | Date | null) {
+export function formatRelativeCountdown(
+  target: string | Date | null,
+  language: Language = DEFAULT_LANGUAGE,
+) {
   if (!target) {
     return null;
   }
 
   const distance = new Date(target).getTime() - Date.now();
   if (distance <= 0) {
-    return "已失效";
+    return null;
   }
 
-  const minutes = Math.floor(distance / 60000);
+  const formatter = new Intl.RelativeTimeFormat(getLocaleForLanguage(language), {
+    numeric: "auto",
+  });
+  const minutes = Math.ceil(distance / 60000);
+
   if (minutes < 60) {
-    return `${minutes} 分钟后`;
+    return formatter.format(minutes, "minute");
   }
 
-  const hours = Math.floor(minutes / 60);
+  const hours = Math.ceil(distance / (60 * 60 * 1000));
   if (hours < 24) {
-    return `${hours} 小时后`;
+    return formatter.format(hours, "hour");
   }
 
-  const days = Math.floor(hours / 24);
-  return `${days} 天后`;
+  const days = Math.ceil(distance / (24 * 60 * 60 * 1000));
+  return formatter.format(days, "day");
 }
 
 export function cn(...values: Array<string | false | null | undefined>) {

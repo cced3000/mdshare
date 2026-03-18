@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { resolveApiError } from "@/lib/api-errors";
+import { getRequestLanguage } from "@/lib/request-language";
 import { updateShareSettings } from "@/lib/share-service";
 
 const settingsSchema = z.object({
@@ -19,11 +20,13 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ slug: string }> },
 ) {
+  const language = getRequestLanguage(request);
   const { slug } = await context.params;
 
   try {
     const payload = settingsSchema.parse(await request.json());
     const result = await updateShareSettings({
+      language,
       slug,
       token: readToken(request),
       ...payload,
@@ -31,7 +34,7 @@ export async function PATCH(
 
     return NextResponse.json(result);
   } catch (error) {
-    const { message, status } = resolveApiError(error, "修改设置时发生未知错误");
+    const { message, status } = resolveApiError(error, language, "error.saveSettingsFailed");
     return NextResponse.json({ error: message }, { status });
   }
 }
