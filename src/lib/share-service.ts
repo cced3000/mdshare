@@ -1,6 +1,5 @@
 import { eq, and, lt, isNull, isNotNull, sql } from "drizzle-orm";
-// bcrypt-ts instead of bcryptjs
-import { hash, compare } from "bcrypt-ts"; 
+import { compare, hash } from "bcrypt-ts/browser";
 import { getDb } from "@/lib/db";
 import { shares, shareViews } from "@/lib/schema";
 import { BURN_GRACE_MINUTES, DEFAULT_EXPIRY_HOURS, EXPIRY_OPTIONS } from "@/lib/constants";
