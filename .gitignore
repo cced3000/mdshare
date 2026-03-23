@@ -9,6 +9,9 @@
 # next.js
 /.next/
 /.open-next/
+/.tmp-manual-min/
+/.tmp-manual-npm/
+/.tmp-mppx/
 /out/
 /dist/
 build/

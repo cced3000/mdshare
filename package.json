@@ -9,9 +9,10 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
-    "cf:build": "opennextjs-cloudflare build && node scripts/patch_opennext_require_resolve.mjs",
+    "cf:build": "node scripts/cf-build.mjs",
     "cf:preview": "opennextjs-cloudflare preview",
     "cf:deploy": "opennextjs-cloudflare deploy",
+    "cf:deploy:auto": "powershell -ExecutionPolicy Bypass -File .\\scripts\\deploy-cloudflare.ps1",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "wrangler d1 migrations apply mdshare-d1 --remote",
@@ -24,6 +25,7 @@
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.44.7",
     "lucide-react": "^0.577.0",
+    "mppx": "^0.4.7",
     "nanoid": "^5.1.6",
     "next": "^16.1.6",
     "react": "^19.2.4",
@@ -33,6 +35,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@ast-grep/napi-linux-x64-gnu": "^0.42.0",
     "@cloudflare/workers-types": "^4.20260310.1",
     "@types/node": "^25.4.0",
     "@types/react": "^19.2.14",

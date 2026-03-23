@@ -1,0 +1,23 @@
+# This file shows how to configure MPP for Cloudflare Workers deployment.
+# Copy needed parts into wrangler.toml and use `wrangler secret put` for secrets.
+
+[vars]
+# Optional: if unset, MPP is auto-enabled when both MPP_SECRET_KEY and MPP_RECIPIENT exist
+MPP_ENABLED = "true"
+
+# Optional: default charge amount for POST /api/mpp/shares
+MPP_AMOUNT = "0.01"
+
+# Optional: defaults to pathUSD on Tempo
+MPP_CURRENCY = "0x20c0000000000000000000000000000000000000"
+
+# Optional: push or pull
+MPP_MODE = "push"
+
+# Optional: true/false
+MPP_WAIT_FOR_CONFIRMATION = "false"
+
+# Do NOT put secrets directly in wrangler.toml for production.
+# Set secrets with:
+# pnpm exec wrangler secret put MPP_SECRET_KEY
+# pnpm exec wrangler secret put MPP_RECIPIENT
